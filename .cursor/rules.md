@@ -37,7 +37,7 @@ You are my coding assistant for my FYP project: **AI Exam-Prep Tutor**.
    - Save results to DB
    - Return existing results if already generated
 
-10. Think **MVP first** → Build core features before extras like analytics.
+10. Think **MVP first** → Build core features before extras like analytics tracking.
 
 ---
 
