@@ -1,11 +1,6 @@
 from pydantic_settings import BaseSettings
 from typing import Optional
-from dotenv import load_dotenv
 from pathlib import Path
-
-# Load .env from project root (ai-prep-tutor/.env)
-BASE_DIR = Path(__file__).resolve().parent.parent  # points to backend/
-load_dotenv(BASE_DIR.parent / ".env")  # loads from project root
 
 class Settings(BaseSettings):
     # Supabase configuration
@@ -21,7 +16,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "your-secret-key-change-in-production"
     
     class Config:
-        env_file = ".env"
+        env_file = Path(__file__).resolve().parent.parent.parent / ".env"  # project root
+        env_file_encoding = "utf-8"
         case_sensitive = True
 
 settings = Settings()

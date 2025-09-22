@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, validator
 import httpx
 from app.config import settings
 
@@ -7,12 +7,26 @@ router = APIRouter()
 
 # Pydantic models for request/response
 class SignupRequest(BaseModel):
-    email: EmailStr
+    email: str
     password: str
+    
+    @validator('email')
+    def validate_email(cls, v):
+        # Basic email validation for development
+        if '@' not in v or '.' not in v.split('@')[1]:
+            raise ValueError('Invalid email format')
+        return v.lower()
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: str
     password: str
+    
+    @validator('email')
+    def validate_email(cls, v):
+        # Basic email validation for development
+        if '@' not in v or '.' not in v.split('@')[1]:
+            raise ValueError('Invalid email format')
+        return v.lower()
 
 class AuthResponse(BaseModel):
     user_id: str
@@ -32,26 +46,42 @@ async def signup(request: SignupRequest):
     Create a new user account in Supabase Auth.
     """
     try:
+        print(f"Signup attempt for email: {request.email}")
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{settings.SUPABASE_URL}/auth/v1/admin/users",
+                f"{settings.SUPABASE_URL}/auth/v1/signup",
                 headers={
-                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
-                    "apikey": settings.SUPABASE_SERVICE_KEY,
+                    "apikey": settings.SUPABASE_ANON_KEY or settings.SUPABASE_SERVICE_KEY,
                     "Content-Type": "application/json"
                 },
                 json={
                     "email": request.email,
-                    "password": request.password,
-                    "email_confirm": True  # Auto-confirm email for development
+                    "password": request.password
                 }
             )
             
-            if response.status_code == 201:
+            # Debug: Print response details
+            print(f"Supabase Response Status: {response.status_code}")
+            print(f"Supabase Response Text: {response.text}")
+            
+            # Handle successful responses (200, 201, or any 2xx status)
+            if 200 <= response.status_code < 300:
                 user_data = response.json()
+                print(f"User data structure: {user_data}")
+                
+                # Extract user ID and email from different possible response structures
+                user_id = user_data.get("id") or user_data.get("user", {}).get("id")
+                email = user_data.get("email") or user_data.get("user", {}).get("email")
+                
+                if not user_id or not email:
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail=f"Unexpected response structure: {user_data}"
+                    )
+                
                 return AuthResponse(
-                    user_id=user_data["id"],
-                    email=user_data["email"],
+                    user_id=user_id,
+                    email=email,
                     message="User created successfully"
                 )
             elif response.status_code == 422:
@@ -60,21 +90,40 @@ async def signup(request: SignupRequest):
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Invalid input: {error_data.get('msg', 'Validation error')}"
                 )
-            elif response.status_code == 409:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="User with this email already exists"
-                )
+            elif response.status_code == 400:
+                error_data = response.json()
+                error_msg = error_data.get("msg", "Invalid input")
+                print(f"400 Error Details: {error_msg}")
+                
+                if "already registered" in error_msg.lower():
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="User with this email already exists"
+                    )
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Signup failed: {error_msg}"
+                    )
             else:
+                error_data = response.json() if response.content else {}
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to create user"
+                    detail=f"Failed to create user: {error_data.get('msg', 'Unknown error')}"
                 )
                 
-    except httpx.RequestError:
+    except httpx.RequestError as e:
+        print(f"Request error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Authentication service unavailable"
+            detail=f"Authentication service unavailable: {str(e)}"
+        )
+    except Exception as e:
+        print(f"Unexpected error in signup: {str(e)}")
+        print(f"Error type: {type(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Signup failed: {str(e)}"
         )
 
 @router.post("/login", response_model=LoginResponse)
