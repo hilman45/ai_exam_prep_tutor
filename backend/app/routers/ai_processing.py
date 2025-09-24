@@ -9,12 +9,12 @@ from app.config import settings
 
 router = APIRouter()
 
-# Chunk size for text processing (characters)
-CHUNK_SIZE = 3000
+# Chunk size for text processing (characters) - increased for better context
+CHUNK_SIZE = 4000
 
 def chunk_text(text: str, max_chars: int = CHUNK_SIZE) -> List[str]:
     """
-    Split text into chunks to avoid model token limits.
+    Split text into chunks to avoid model token limits with improved boundary detection.
     
     Args:
         text: The text to chunk
@@ -34,16 +34,29 @@ def chunk_text(text: str, max_chars: int = CHUNK_SIZE) -> List[str]:
         
         # If we're not at the end of the text, try to break at a sentence boundary
         if end < len(text):
-            # Look for sentence endings within the last 200 characters
-            search_start = max(start, end - 200)
-            sentence_endings = ['.', '!', '?', '\n\n']
+            # Look for sentence endings within the last 300 characters for better context
+            search_start = max(start, end - 300)
+            sentence_endings = ['. ', '! ', '? ', '\n\n', '\n', '.', '!', '?']
             
             best_break = end
             for ending in sentence_endings:
                 last_ending = text.rfind(ending, search_start, end)
                 if last_ending > start:
-                    best_break = last_ending + 1
+                    # For punctuation with space, include the space
+                    if ending.endswith(' '):
+                        best_break = last_ending + len(ending)
+                    else:
+                        best_break = last_ending + 1
                     break
+            
+            # If no good break found, try paragraph breaks
+            if best_break == end:
+                paragraph_breaks = ['\n\n', '\n']
+                for break_char in paragraph_breaks:
+                    last_break = text.rfind(break_char, search_start, end)
+                    if last_break > start:
+                        best_break = last_break + len(break_char)
+                        break
             
             end = best_break
         
@@ -55,61 +68,126 @@ def chunk_text(text: str, max_chars: int = CHUNK_SIZE) -> List[str]:
     
     return chunks
 
-async def call_model_for_summarization(chunked_texts: List[str]) -> str:
+def get_summary_prompt(text: str, format_type: str) -> str:
+    """
+    Generate format-specific prompt for summarization.
+    
+    Args:
+        text: The text to summarize
+        format_type: "normal" or "bullet_points"
+        
+    Returns:
+        Formatted prompt for the model
+    """
+    # Always use the same prompt for BART - we'll format the output later
+    return f"Summarize the following text:\n\n{text}"
+
+def format_summary_as_bullets(summary_text: str) -> str:
+    """
+    Convert a summary text into bullet point format.
+    
+    Args:
+        summary_text: The summary text to convert
+        
+    Returns:
+        Bullet point formatted text
+    """
+    # Split by sentences and create bullet points
+    sentences = summary_text.split('. ')
+    
+    # Clean up and filter empty sentences
+    bullet_points = []
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if sentence and len(sentence) > 10:  # Only include substantial sentences
+            # Remove trailing period if present
+            if sentence.endswith('.'):
+                sentence = sentence[:-1]
+            bullet_points.append(f"• {sentence}")
+    
+    return '\n'.join(bullet_points)
+
+async def call_model_for_summarization(chunked_texts: List[str], format_type: str = "normal") -> str:
     """
     Call AI model for summarization with local transformers or Hugging Face API fallback.
     
     Args:
         chunked_texts: List of text chunks to summarize
+        format_type: Summary format - "normal" or "bullet_points"
         
     Returns:
         Combined summary text
     """
     try:
         # Try local transformers first
-        return await _summarize_with_local_model(chunked_texts)
+        return await _summarize_with_local_model(chunked_texts, format_type)
     except Exception as local_error:
         print(f"Local model failed: {local_error}")
         
         # Fallback to Hugging Face API if available
         if settings.HUGGINGFACE_API_KEY:
             try:
-                return await _summarize_with_hf_api(chunked_texts)
+                return await _summarize_with_hf_api(chunked_texts, format_type)
             except Exception as api_error:
                 print(f"HF API failed: {api_error}")
                 raise Exception(f"Both local and API summarization failed. Local: {local_error}, API: {api_error}")
         else:
             raise Exception(f"Local summarization failed and no HF API key available: {local_error}")
 
-async def _summarize_with_local_model(chunked_texts: List[str]) -> str:
-    """Summarize using local transformers pipeline or simple text extraction."""
+async def _summarize_with_local_model(chunked_texts: List[str], format_type: str = "normal") -> str:
+    """Summarize using local transformers pipeline with optimized BART-large-CNN."""
     try:
         print("🤖 Attempting to import transformers...")
         from transformers import pipeline
+        import torch
         print("✅ Transformers imported successfully!")
         
-        print("🤖 Initializing summarization pipeline...")
-        # Initialize summarization pipeline with a lightweight model
+        # Check if CUDA is available for GPU acceleration
+        device = 0 if torch.cuda.is_available() else -1
+        device_name = "GPU" if device == 0 else "CPU"
+        print(f"🤖 Using {device_name} for processing...")
+        
+        print("🤖 Initializing BART-large-CNN summarization pipeline...")
+        # Initialize summarization pipeline with optimized parameters for better paraphrasing
         summarizer = pipeline(
             "summarization",
             model="facebook/bart-large-cnn",
-            device=-1,  # Use CPU
-            max_length=150,
-            min_length=30,
-            do_sample=False
+            device=device,  # Use GPU if available, otherwise CPU
+            max_length=200,  # Increased for more comprehensive summaries
+            min_length=50,   # Increased minimum for better paraphrasing
+            do_sample=True,   # Enable sampling for more natural paraphrasing
+            temperature=0.7,  # Add some creativity to avoid exact copying
+            top_p=0.9,        # Nucleus sampling for better quality
+            repetition_penalty=1.1,  # Reduce repetition
+            no_repeat_ngram_size=3    # Avoid repeating 3-grams
         )
-        print("✅ Summarization pipeline initialized!")
+        print(f"✅ BART-large-CNN pipeline initialized on {device_name}!")
         
         chunk_summaries = []
         
         for i, chunk in enumerate(chunked_texts):
             try:
-                print(f"🤖 Summarizing chunk {i+1}/{len(chunked_texts)} (length: {len(chunk)} chars)")
-                # Summarize each chunk
-                result = summarizer(chunk, max_length=150, min_length=30)
+                print(f"🤖 Summarizing chunk {i+1}/{len(chunked_texts)} (length: {len(chunk)} chars) in {format_type} format")
+                # Create format-specific prompt
+                prompt = get_summary_prompt(chunk, format_type)
+                
+                # Summarize each chunk with optimized parameters for better paraphrasing
+                result = summarizer(
+                    prompt, 
+                    max_length=200,  # Increased for more comprehensive summaries
+                    min_length=50,   # Increased minimum for better paraphrasing
+                    do_sample=True,   # Enable sampling for natural paraphrasing
+                    temperature=0.7,  # Add creativity
+                    top_p=0.9,        # Nucleus sampling
+                    repetition_penalty=1.1,  # Reduce repetition
+                    no_repeat_ngram_size=3   # Avoid repeating phrases
+                )
                 chunk_summary = result[0]['summary_text']
+                # Apply formatting if needed
+                if format_type == "bullet_points":
+                    chunk_summary = format_summary_as_bullets(chunk_summary)
                 chunk_summaries.append(chunk_summary)
-                print(f"✅ Chunk {i+1} summarized successfully")
+                print(f"✅ Chunk {i+1} summarized successfully (length: {len(chunk_summary)} chars)")
             except Exception as e:
                 print(f"❌ Failed to summarize chunk {i+1}: {e}")
                 print(f"❌ Chunk content preview: {chunk[:100]}...")
@@ -121,16 +199,35 @@ async def _summarize_with_local_model(chunked_texts: List[str]) -> str:
             print(f"🤖 Combining {len(chunk_summaries)} chunk summaries...")
             combined_text = " ".join(chunk_summaries)
             if len(combined_text) > 1000:  # If combined is still long, summarize again
-                print("🤖 Final summarization of combined text...")
-                final_result = summarizer(combined_text, max_length=200, min_length=50)
+                print(f"🤖 Final summarization of combined text in {format_type} format...")
+                final_prompt = get_summary_prompt(combined_text, format_type)
+                final_result = summarizer(
+                    final_prompt, 
+                    max_length=250,  # Slightly longer for final summary
+                    min_length=60,   # Minimum for comprehensive final summary
+                    do_sample=True,   # Enable sampling for natural paraphrasing
+                    temperature=0.7,  # Add creativity
+                    top_p=0.9,        # Nucleus sampling
+                    repetition_penalty=1.1,  # Reduce repetition
+                    no_repeat_ngram_size=3   # Avoid repeating phrases
+                )
                 final_summary = final_result[0]['summary_text']
+                # Apply formatting if needed
+                if format_type == "bullet_points":
+                    final_summary = format_summary_as_bullets(final_summary)
                 print(f"✅ Final AI summary generated (length: {len(final_summary)} chars)")
                 return final_summary
             else:
+                # Apply formatting to combined text if needed
+                if format_type == "bullet_points":
+                    combined_text = format_summary_as_bullets(combined_text)
                 print(f"✅ Combined summary generated (length: {len(combined_text)} chars)")
                 return combined_text
         else:
             final_summary = chunk_summaries[0] if chunk_summaries else "Unable to generate summary."
+            # Apply formatting to single chunk if needed
+            if format_type == "bullet_points":
+                final_summary = format_summary_as_bullets(final_summary)
             print(f"✅ Single chunk summary generated (length: {len(final_summary)} chars)")
             return final_summary
             
@@ -177,13 +274,14 @@ async def _simple_text_summary(chunked_texts: List[str]) -> str:
         print(f"⚠️  Using text preview fallback (length: {len(fallback)} chars)")
         return fallback
 
-async def _summarize_with_hf_api(chunked_texts: List[str]) -> str:
+async def _summarize_with_hf_api(chunked_texts: List[str], format_type: str = "normal") -> str:
     """Summarize using Hugging Face Inference API."""
     try:
         async with httpx.AsyncClient() as client:
             chunk_summaries = []
             
             for chunk in chunked_texts:
+                prompt = get_summary_prompt(chunk, format_type)
                 response = await client.post(
                     "https://api-inference.huggingface.co/models/facebook/bart-large-cnn",
                     headers={
@@ -191,11 +289,15 @@ async def _summarize_with_hf_api(chunked_texts: List[str]) -> str:
                         "Content-Type": "application/json"
                     },
                     json={
-                        "inputs": chunk,
+                        "inputs": prompt,
                         "parameters": {
-                            "max_length": 150,
-                            "min_length": 30,
-                            "do_sample": False
+                            "max_length": 200,
+                            "min_length": 50,
+                            "do_sample": True,
+                            "temperature": 0.7,
+                            "top_p": 0.9,
+                            "repetition_penalty": 1.1,
+                            "no_repeat_ngram_size": 3
                         }
                     },
                     timeout=30.0
@@ -204,7 +306,11 @@ async def _summarize_with_hf_api(chunked_texts: List[str]) -> str:
                 if response.status_code == 200:
                     result = response.json()
                     if isinstance(result, list) and len(result) > 0:
-                        chunk_summaries.append(result[0]['summary_text'])
+                        chunk_summary = result[0]['summary_text']
+                        # Apply formatting if needed
+                        if format_type == "bullet_points":
+                            chunk_summary = format_summary_as_bullets(chunk_summary)
+                        chunk_summaries.append(chunk_summary)
                     else:
                         chunk_summaries.append(chunk[:200] + "...")
                 else:
@@ -216,6 +322,7 @@ async def _summarize_with_hf_api(chunked_texts: List[str]) -> str:
                 combined_text = " ".join(chunk_summaries)
                 if len(combined_text) > 1000:
                     # Summarize the combined text
+                    final_prompt = get_summary_prompt(combined_text, format_type)
                     response = await client.post(
                         "https://api-inference.huggingface.co/models/facebook/bart-large-cnn",
                         headers={
@@ -223,11 +330,15 @@ async def _summarize_with_hf_api(chunked_texts: List[str]) -> str:
                             "Content-Type": "application/json"
                         },
                         json={
-                            "inputs": combined_text,
+                            "inputs": final_prompt,
                             "parameters": {
-                                "max_length": 200,
-                                "min_length": 50,
-                                "do_sample": False
+                                "max_length": 250,
+                                "min_length": 60,
+                                "do_sample": True,
+                                "temperature": 0.7,
+                                "top_p": 0.9,
+                                "repetition_penalty": 1.1,
+                                "no_repeat_ngram_size": 3
                             }
                         },
                         timeout=30.0
@@ -236,11 +347,22 @@ async def _summarize_with_hf_api(chunked_texts: List[str]) -> str:
                     if response.status_code == 200:
                         result = response.json()
                         if isinstance(result, list) and len(result) > 0:
-                            return result[0]['summary_text']
+                            final_summary = result[0]['summary_text']
+                            # Apply formatting if needed
+                            if format_type == "bullet_points":
+                                final_summary = format_summary_as_bullets(final_summary)
+                            return final_summary
                 
+                # Apply formatting to combined text if needed
+                if format_type == "bullet_points":
+                    combined_text = format_summary_as_bullets(combined_text)
                 return combined_text
             else:
-                return chunk_summaries[0] if chunk_summaries else "Unable to generate summary."
+                final_summary = chunk_summaries[0] if chunk_summaries else "Unable to generate summary."
+                # Apply formatting if needed
+                if format_type == "bullet_points":
+                    final_summary = format_summary_as_bullets(final_summary)
+                return final_summary
                 
     except Exception as e:
         raise Exception(f"HF API error: {str(e)}")
@@ -397,7 +519,7 @@ async def delete_file_summary(
         )
 
 @router.post("/test-ai-summarization")
-async def test_ai_summarization():
+async def test_ai_summarization(format_type: str = "normal"):
     """
     Test endpoint to verify AI summarization is working.
     This endpoint doesn't require authentication for testing purposes.
@@ -414,14 +536,15 @@ async def test_ai_summarization():
         questions about ethics, privacy, and the future of work.
         """
         
-        print("🧪 Testing AI summarization...")
+        print(f"🧪 Testing AI summarization in {format_type} format...")
         chunks = chunk_text(test_text)
-        summary = await call_model_for_summarization(chunks)
+        summary = await call_model_for_summarization(chunks, format_type)
         
         return JSONResponse(
             status_code=200,
             content={
                 "message": "AI summarization test completed",
+                "format_type": format_type,
                 "original_text_length": len(test_text),
                 "summary": summary,
                 "summary_length": len(summary),
@@ -442,10 +565,16 @@ async def test_ai_summarization():
 @router.post("/summarize/{file_id}")
 async def summarize_file(
     file_id: str,
+    format_type: str = "normal",  # "normal" or "bullet_points"
     current_user: User = Depends(get_current_user)
 ):
     """
     Generate a summary for the specified file.
+    
+    Args:
+        file_id: The ID of the file to summarize
+        format_type: Summary format - "normal" (paragraph) or "bullet_points" (bullet list)
+        current_user: Authenticated user
     
     - Checks if summary already exists and returns cached version
     - Fetches file content with ownership verification
@@ -487,7 +616,7 @@ async def summarize_file(
         chunks = chunk_text(text_content)
         
         # Generate summary using AI model
-        summary_text = await call_model_for_summarization(chunks)
+        summary_text = await call_model_for_summarization(chunks, format_type)
         
         # Save summary to database
         summary_id = await save_summary(file_id, current_user.id, summary_text)
@@ -497,6 +626,7 @@ async def summarize_file(
             content={
                 "summary_id": summary_id,
                 "summary_text": summary_text,
+                "format_type": format_type,
                 "cached": False,
                 "filename": file_data["filename"]
             }
