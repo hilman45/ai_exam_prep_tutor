@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     # Security
     SECRET_KEY: str = "your-secret-key-change-in-production"
     
+    # AI Model configuration
+    HUGGINGFACE_API_KEY: Optional[str] = None
+    
     class Config:
         env_file = Path(__file__).resolve().parent.parent.parent / ".env"  # project root
         env_file_encoding = "utf-8"

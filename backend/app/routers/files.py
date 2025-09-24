@@ -119,7 +119,7 @@ async def insert_file_to_supabase(user_id: str, filename: str, text_content: str
                     "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
                     "apikey": settings.SUPABASE_SERVICE_KEY,
                     "Content-Type": "application/json",
-                    "Prefer": "return=minimal"
+                    "Prefer": "return=representation"
                 },
                 json={
                     "user_id": user_id,
@@ -131,10 +131,12 @@ async def insert_file_to_supabase(user_id: str, filename: str, text_content: str
             if response.status_code not in [200, 201]:
                 raise Exception(f"Supabase insert failed: {response.status_code} - {response.text}")
             
-            # Get the file_id from the response or generate one
-            # Since we're using return=minimal, we'll generate a UUID
-            file_id = str(uuid.uuid4())
-            return file_id
+            # Get the actual file_id from the response
+            data = response.json()
+            if data and len(data) > 0:
+                return data[0]["id"]
+            else:
+                raise Exception("No file ID returned from database")
             
     except Exception as e:
         raise Exception(f"Database error: {e}")

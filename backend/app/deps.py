@@ -7,9 +7,10 @@ from app.config import settings
 security = HTTPBearer()
 
 class User:
-    def __init__(self, id: str, email: str):
+    def __init__(self, id: str, email: str, token: str):
         self.id = id
         self.email = email
+        self.token = token
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> User:
     """
@@ -44,7 +45,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
                     headers={"WWW-Authenticate": "Bearer"},
                 )
             
-            return User(id=user_data["id"], email=user_data["email"])
+            return User(id=user_data["id"], email=user_data["email"], token=token)
             
     except httpx.RequestError:
         raise HTTPException(
