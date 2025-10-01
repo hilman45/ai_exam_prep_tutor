@@ -1,9 +1,9 @@
 from dotenv import load_dotenv
 from pathlib import Path
 
-# Load .env from project root before any other imports
+# Load .env from backend directory before any other imports
 BASE_DIR = Path(__file__).resolve().parent.parent  # points to backend/
-load_dotenv(BASE_DIR.parent / ".env")  # loads from project root
+load_dotenv(BASE_DIR / ".env")  # loads from backend directory
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
