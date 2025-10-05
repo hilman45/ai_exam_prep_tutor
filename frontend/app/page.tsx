@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import LottieAnimation from '../components/LottieAnimation'
 
 export default function HomePage() {
@@ -50,12 +51,12 @@ export default function HomePage() {
                 >
                   Features
                 </button>
-                <button className="btn-secondary text-sm">
+                <Link href="/login" className="btn-secondary text-sm">
                   Login
-                </button>
-                <button className="btn-primary text-sm">
+                </Link>
+                <Link href="/signup" className="btn-primary text-sm">
                   Sign Up
-                </button>
+                </Link>
               </div>
             </div>
 
@@ -94,12 +95,12 @@ export default function HomePage() {
                 >
                   Features
                 </button>
-                <button className="btn-secondary w-full mt-2">
+                <Link href="/login" className="btn-secondary w-full mt-2">
                   Login
-                </button>
-                <button className="btn-primary w-full mt-2">
+                </Link>
+                <Link href="/signup" className="btn-primary w-full mt-2">
                   Sign Up
-                </button>
+                </Link>
               </div>
             </div>
           )}

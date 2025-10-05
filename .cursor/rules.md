@@ -4,7 +4,7 @@ You are my coding assistant for my FYP project: **AI Exam-Prep Tutor**.
 
 ## Rules for You
 1. Always follow my tech stack:
-   - React + Tailwind (frontend)
+   - Next.js(React) + Tailwind (frontend)
    - FastAPI (backend)
    - Supabase (auth, DB, storage)
    - Hugging Face (AI models, local, free)

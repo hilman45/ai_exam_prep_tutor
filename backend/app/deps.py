@@ -7,9 +7,10 @@ from app.config import settings
 security = HTTPBearer()
 
 class User:
-    def __init__(self, id: str, email: str, token: str):
+    def __init__(self, id: str, email: str, username: str, token: str):
         self.id = id
         self.email = email
+        self.username = username
         self.token = token
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> User:
@@ -45,7 +46,27 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
                     headers={"WWW-Authenticate": "Bearer"},
                 )
             
-            return User(id=user_data["id"], email=user_data["email"], token=token)
+            # Fetch username from user_profiles table
+            username = "Unknown"  # Default fallback
+            try:
+                profile_response = await client.get(
+                    f"{settings.SUPABASE_URL}/rest/v1/user_profiles?user_id=eq.{user_data['id']}&select=username",
+                    headers={
+                        "apikey": settings.SUPABASE_SERVICE_KEY,
+                        "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}"
+                    }
+                )
+                
+                if profile_response.status_code == 200:
+                    profile_data = profile_response.json()
+                    if profile_data and len(profile_data) > 0:
+                        username = profile_data[0]["username"]
+                        
+            except Exception as profile_error:
+                print(f"Error fetching user profile: {profile_error}")
+                # Continue with default username
+            
+            return User(id=user_data["id"], email=user_data["email"], username=username, token=token)
             
     except httpx.RequestError:
         raise HTTPException(

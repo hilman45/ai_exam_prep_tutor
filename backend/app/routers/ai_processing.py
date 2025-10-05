@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 import httpx
 from app.deps import get_current_user, User
 from app.config import settings
+from .deletion import delete_resource, verify_resource_ownership
 
 router = APIRouter()
 
@@ -600,28 +601,7 @@ async def save_summary(file_id: str, user_id: str, summary_text: str) -> str:
     except Exception as e:
         raise Exception(f"Database error saving summary: {e}")
 
-async def delete_summary(summary_id: str, user_id: str) -> bool:
-    """Delete a summary from Supabase."""
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.delete(
-                f"{settings.SUPABASE_URL}/rest/v1/summaries",
-                headers={
-                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
-                    "apikey": settings.SUPABASE_SERVICE_KEY,
-                    "Content-Type": "application/json"
-                },
-                params={
-                    "id": f"eq.{summary_id}",
-                    "user_id": f"eq.{user_id}"
-                }
-            )
-            
-            return response.status_code in [200, 204]
-            
-    except Exception as e:
-        print(f"Error deleting summary: {e}")
-        return False
+# Removed redundant delete_summary function - using deletion.py instead
 
 # Quiz Generation Functions
 
@@ -1048,28 +1028,7 @@ async def save_quiz(file_id: str, user_id: str, questions: List[Dict[str, Any]])
     except Exception as e:
         raise Exception(f"Database error saving quiz: {e}")
 
-async def delete_quiz(quiz_id: str, user_id: str) -> bool:
-    """Delete a quiz from Supabase."""
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.delete(
-                f"{settings.SUPABASE_URL}/rest/v1/quizzes",
-                headers={
-                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
-                    "apikey": settings.SUPABASE_SERVICE_KEY,
-                    "Content-Type": "application/json"
-                },
-                params={
-                    "id": f"eq.{quiz_id}",
-                    "user_id": f"eq.{user_id}"
-                }
-            )
-            
-            return response.status_code in [200, 204]
-            
-    except Exception as e:
-        print(f"Error deleting quiz: {e}")
-        return False
+# Removed redundant delete_quiz function - using deletion.py instead
 
 # Flashcard Generation Functions
 
@@ -1467,28 +1426,7 @@ async def save_flashcards(file_id: str, user_id: str, cards: List[Dict[str, Any]
     except Exception as e:
         raise Exception(f"Database error saving flashcards: {e}")
 
-async def delete_flashcards(flashcard_id: str, user_id: str) -> bool:
-    """Delete flashcards from Supabase."""
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.delete(
-                f"{settings.SUPABASE_URL}/rest/v1/flashcards",
-                headers={
-                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
-                    "apikey": settings.SUPABASE_SERVICE_KEY,
-                    "Content-Type": "application/json"
-                },
-                params={
-                    "id": f"eq.{flashcard_id}",
-                    "user_id": f"eq.{user_id}"
-                }
-            )
-            
-            return response.status_code in [200, 204]
-            
-    except Exception as e:
-        print(f"Error deleting flashcards: {e}")
-        return False
+# Removed redundant delete_flashcards function - using deletion.py instead
 
 @router.post("/quiz/{file_id}")
 async def generate_quiz(
@@ -1609,13 +1547,9 @@ async def delete_file_quiz(
                 detail="No quiz found for this file"
             )
         
-        # Delete the quiz
-        success = await delete_quiz(existing_quiz["id"], current_user.id)
-        if not success:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to delete quiz"
-            )
+        # Delete the quiz using deletion.py functions
+        await verify_resource_ownership(existing_quiz["id"], "quizzes", current_user.id)
+        await delete_resource("quizzes", existing_quiz["id"])
         
         return JSONResponse(
             status_code=status.HTTP_200_OK,
@@ -1650,13 +1584,9 @@ async def delete_file_summary(
                 detail="No summary found for this file"
             )
         
-        # Delete the summary
-        success = await delete_summary(existing_summary["id"], current_user.id)
-        if not success:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to delete summary"
-            )
+        # Delete the summary using deletion.py functions
+        await verify_resource_ownership(existing_summary["id"], "summaries", current_user.id)
+        await delete_resource("summaries", existing_summary["id"])
         
         return JSONResponse(
             status_code=status.HTTP_200_OK,
@@ -1969,13 +1899,9 @@ async def delete_file_flashcards(
                 detail="No flashcards found for this file"
             )
         
-        # Delete the flashcards
-        success = await delete_flashcards(existing_flashcards["id"], current_user.id)
-        if not success:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to delete flashcards"
-            )
+        # Delete the flashcards using deletion.py functions
+        await verify_resource_ownership(existing_flashcards["id"], "flashcards", current_user.id)
+        await delete_resource("flashcards", existing_flashcards["id"])
         
         return JSONResponse(
             status_code=status.HTTP_200_OK,

@@ -7,8 +7,10 @@ router = APIRouter()
 
 # Pydantic models for request/response
 class SignupRequest(BaseModel):
+    username: str
     email: str
     password: str
+    confirm_password: str
     
     @validator('email')
     def validate_email(cls, v):
@@ -16,6 +18,32 @@ class SignupRequest(BaseModel):
         if '@' not in v or '.' not in v.split('@')[1]:
             raise ValueError('Invalid email format')
         return v.lower()
+    
+    @validator('username')
+    def validate_username(cls, v):
+        # Username validation
+        if len(v.strip()) < 3:
+            raise ValueError('Username must be at least 3 characters long')
+        if len(v.strip()) > 30:
+            raise ValueError('Username must be less than 30 characters')
+        # Allow alphanumeric characters, underscores, and hyphens
+        if not v.replace('_', '').replace('-', '').isalnum():
+            raise ValueError('Username can only contain letters, numbers, underscores, and hyphens')
+        return v.strip()
+    
+    @validator('password')
+    def validate_password(cls, v):
+        # Password validation
+        if len(v) < 6:
+            raise ValueError('Password must be at least 6 characters long')
+        return v
+    
+    @validator('confirm_password')
+    def validate_confirm_password(cls, v, values):
+        # Confirm password validation
+        if 'password' in values and v != values['password']:
+            raise ValueError('Passwords do not match')
+        return v
 
 class LoginRequest(BaseModel):
     email: str
@@ -30,6 +58,7 @@ class LoginRequest(BaseModel):
 
 class AuthResponse(BaseModel):
     user_id: str
+    username: str
     email: str
     message: str
 
@@ -38,6 +67,7 @@ class LoginResponse(BaseModel):
     refresh_token: str
     expires_in: int
     user_id: str
+    username: str
     email: str
 
 @router.post("/signup", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
@@ -79,8 +109,33 @@ async def signup(request: SignupRequest):
                         detail=f"Unexpected response structure: {user_data}"
                     )
                 
+                # Save username to user_profiles table
+                try:
+                    profile_response = await client.post(
+                        f"{settings.SUPABASE_URL}/rest/v1/user_profiles",
+                        headers={
+                            "apikey": settings.SUPABASE_SERVICE_KEY,
+                            "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                            "Content-Type": "application/json",
+                            "Prefer": "return=minimal"
+                        },
+                        json={
+                            "user_id": user_id,
+                            "username": request.username
+                        }
+                    )
+                    
+                    if profile_response.status_code not in [200, 201]:
+                        print(f"Failed to create user profile: {profile_response.text}")
+                        # Continue anyway - user is created, profile can be added later
+                        
+                except Exception as profile_error:
+                    print(f"Error creating user profile: {profile_error}")
+                    # Continue anyway - user is created, profile can be added later
+                
                 return AuthResponse(
                     user_id=user_id,
+                    username=request.username,
                     email=email,
                     message="User created successfully"
                 )
@@ -148,12 +203,34 @@ async def login(request: LoginRequest):
             if response.status_code == 200:
                 auth_data = response.json()
                 user_data = auth_data.get("user", {})
+                user_id = user_data["id"]
+                
+                # Fetch username from user_profiles table
+                username = "Unknown"  # Default fallback
+                try:
+                    profile_response = await client.get(
+                        f"{settings.SUPABASE_URL}/rest/v1/user_profiles?user_id=eq.{user_id}&select=username",
+                        headers={
+                            "apikey": settings.SUPABASE_SERVICE_KEY,
+                            "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}"
+                        }
+                    )
+                    
+                    if profile_response.status_code == 200:
+                        profile_data = profile_response.json()
+                        if profile_data and len(profile_data) > 0:
+                            username = profile_data[0]["username"]
+                            
+                except Exception as profile_error:
+                    print(f"Error fetching user profile: {profile_error}")
+                    # Continue with default username
                 
                 return LoginResponse(
                     access_token=auth_data["access_token"],
                     refresh_token=auth_data["refresh_token"],
                     expires_in=auth_data.get("expires_in", 3600),
-                    user_id=user_data["id"],
+                    user_id=user_id,
+                    username=username,
                     email=user_data["email"]
                 )
             elif response.status_code == 400:

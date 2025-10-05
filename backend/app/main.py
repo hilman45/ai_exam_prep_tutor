@@ -7,7 +7,7 @@ load_dotenv(BASE_DIR / ".env")  # loads from backend directory
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth, protected, files, ai_processing
+from app.routers import auth, protected, files, ai_processing, deletion
 from app.config import settings
 
 app = FastAPI(
@@ -30,6 +30,7 @@ app.include_router(auth.router, prefix="/auth", tags=["authentication"])
 app.include_router(protected.router, prefix="/protected", tags=["protected"])
 app.include_router(files.router, prefix="/files", tags=["files"])
 app.include_router(ai_processing.router, prefix="/ai", tags=["ai-processing"])
+app.include_router(deletion.router, prefix="/delete", tags=["deletion"])
 
 @app.get("/")
 async def root():
