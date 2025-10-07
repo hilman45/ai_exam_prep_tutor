@@ -571,7 +571,7 @@ async def get_existing_summary(file_id: str, user_id: str) -> Optional[Dict[str,
         print(f"Error fetching existing summary: {e}")
         return None
 
-async def save_summary(file_id: str, user_id: str, summary_text: str) -> str:
+async def save_summary(file_id: str, user_id: str, summary_text: str, folder_id: str = None) -> str:
     """Save summary to Supabase and return summary_id."""
     try:
         summary_id = str(uuid.uuid4())
@@ -589,7 +589,8 @@ async def save_summary(file_id: str, user_id: str, summary_text: str) -> str:
                     "id": summary_id,
                     "file_id": file_id,
                     "user_id": user_id,
-                    "summary_text": summary_text
+                    "summary_text": summary_text,
+                    "folder_id": folder_id
                 }
             )
             
@@ -998,7 +999,7 @@ async def get_existing_quiz(file_id: str, user_id: str) -> Optional[Dict[str, An
         print(f"Error fetching existing quiz: {e}")
         return None
 
-async def save_quiz(file_id: str, user_id: str, questions: List[Dict[str, Any]]) -> str:
+async def save_quiz(file_id: str, user_id: str, questions: List[Dict[str, Any]], folder_id: str = None) -> str:
     """Save quiz to Supabase and return quiz_id."""
     try:
         quiz_id = str(uuid.uuid4())
@@ -1016,7 +1017,8 @@ async def save_quiz(file_id: str, user_id: str, questions: List[Dict[str, Any]])
                     "id": quiz_id,
                     "file_id": file_id,
                     "user_id": user_id,
-                    "questions": questions
+                    "questions": questions,
+                    "folder_id": folder_id
                 }
             )
             
@@ -1396,7 +1398,27 @@ async def get_existing_flashcards(file_id: str, user_id: str) -> Optional[Dict[s
         print(f"Error fetching existing flashcards: {e}")
         return None
 
-async def save_flashcards(file_id: str, user_id: str, cards: List[Dict[str, Any]]) -> str:
+async def get_file_folder_id(file_id: str, user_id: str) -> str:
+    """Get the folder_id for a given file"""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{settings.SUPABASE_URL}/rest/v1/files?id=eq.{file_id}&user_id=eq.{user_id}&select=folder_id",
+                headers={
+                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                    "apikey": settings.SUPABASE_SERVICE_KEY
+                }
+            )
+            
+            if response.status_code == 200 and response.json():
+                return response.json()[0].get("folder_id")
+            return None
+            
+    except Exception as e:
+        print(f"Error fetching file folder_id: {e}")
+        return None
+
+async def save_flashcards(file_id: str, user_id: str, cards: List[Dict[str, Any]], folder_id: str = None) -> str:
     """Save flashcards to Supabase and return flashcard_id."""
     try:
         flashcard_id = str(uuid.uuid4())
@@ -1414,7 +1436,8 @@ async def save_flashcards(file_id: str, user_id: str, cards: List[Dict[str, Any]
                     "id": flashcard_id,
                     "file_id": file_id,
                     "user_id": user_id,
-                    "cards": cards
+                    "cards": cards,
+                    "folder_id": folder_id
                 }
             )
             
@@ -1501,8 +1524,11 @@ async def generate_quiz(
                 detail="AI model failed to generate sufficient quiz questions"
             )
         
+        # Get folder_id from the file
+        folder_id = await get_file_folder_id(file_id, current_user.id)
+        
         # Save quiz to database
-        quiz_id = await save_quiz(file_id, current_user.id, questions)
+        quiz_id = await save_quiz(file_id, current_user.id, questions, folder_id)
         
         return JSONResponse(
             status_code=status.HTTP_200_OK,
@@ -1746,8 +1772,11 @@ async def summarize_file(
         # Generate summary using AI model
         summary_text = await call_model_for_summarization(chunks, format_type)
         
+        # Get folder_id from the file
+        folder_id = await get_file_folder_id(file_id, current_user.id)
+        
         # Save summary to database
-        summary_id = await save_summary(file_id, current_user.id, summary_text)
+        summary_id = await save_summary(file_id, current_user.id, summary_text, folder_id)
         
         return JSONResponse(
             status_code=status.HTTP_200_OK,
@@ -1853,8 +1882,11 @@ async def generate_flashcards(
                 detail="AI model failed to generate sufficient flashcards"
             )
         
+        # Get folder_id from the file
+        folder_id = await get_file_folder_id(file_id, current_user.id)
+        
         # Save flashcards to database
-        flashcard_id = await save_flashcards(file_id, current_user.id, cards)
+        flashcard_id = await save_flashcards(file_id, current_user.id, cards, folder_id)
         
         return JSONResponse(
             status_code=status.HTTP_200_OK,

@@ -79,25 +79,33 @@ export default function SignUpPage() {
     setIsSubmitting(true)
     
     try {
-      // Use Supabase auth for signup
-      const { data, error } = await authHelpers.signUp(
-        formData.email,
-        formData.password,
-        formData.username
-      )
+      // Use backend API for signup (which creates default folder)
+      const response = await fetch('http://localhost:8000/auth/signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: formData.username,
+          email: formData.email,
+          password: formData.password,
+          confirm_password: formData.confirmPassword
+        })
+      })
 
+      const result = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(result.detail || 'Signup failed')
+      }
+
+      // Signup successful, now login with Supabase
+      const { data, error } = await authHelpers.signIn(formData.email, formData.password)
+      
       if (error) {
-        console.error('Signup error:', error)
-        
-        // Handle specific error cases
-        const errorMessage = (error as any)?.message || 'An error occurred during signup'
-        if (errorMessage.includes('already registered') || errorMessage.includes('already exists')) {
-          setErrors({ submit: 'User with this email already exists' })
-        } else if (errorMessage.includes('password')) {
-          setErrors({ submit: 'Password does not meet requirements' })
-        } else {
-          setErrors({ submit: errorMessage })
-        }
+        console.error('Auto-login error:', error)
+        // User created but login failed, redirect to login page
+        router.push('/login?message=Account created successfully. Please log in.')
         return
       }
 
@@ -112,8 +120,17 @@ export default function SignUpPage() {
       }
       
     } catch (error) {
-      console.error('Unexpected signup error:', error)
-      setErrors({ submit: 'An unexpected error occurred. Please try again.' })
+      console.error('Signup error:', error)
+      const errorMessage = (error as Error)?.message || 'An error occurred during signup'
+      
+      // Handle specific error cases
+      if (errorMessage.includes('already registered') || errorMessage.includes('already exists')) {
+        setErrors({ submit: 'User with this email already exists' })
+      } else if (errorMessage.includes('password')) {
+        setErrors({ submit: 'Password does not meet requirements' })
+      } else {
+        setErrors({ submit: errorMessage })
+      }
     } finally {
       setIsSubmitting(false)
     }

@@ -133,6 +133,31 @@ async def signup(request: SignupRequest):
                     print(f"Error creating user profile: {profile_error}")
                     # Continue anyway - user is created, profile can be added later
                 
+                # Create default "Untitled" folder for the new user
+                try:
+                    folder_response = await client.post(
+                        f"{settings.SUPABASE_URL}/rest/v1/folders",
+                        headers={
+                            "apikey": settings.SUPABASE_SERVICE_KEY,
+                            "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                            "Content-Type": "application/json",
+                            "Prefer": "return=minimal"
+                        },
+                        json={
+                            "user_id": user_id,
+                            "name": "Untitled",
+                            "color": "#E9D5FF"
+                        }
+                    )
+                    
+                    if folder_response.status_code not in [200, 201]:
+                        print(f"Failed to create default folder: {folder_response.text}")
+                        # Continue anyway - user is created, folder can be created later
+                        
+                except Exception as folder_error:
+                    print(f"Error creating default folder: {folder_error}")
+                    # Continue anyway - user is created, folder can be created later
+                
                 return AuthResponse(
                     user_id=user_id,
                     username=request.username,

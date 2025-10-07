@@ -109,7 +109,7 @@ def extract_text_from_file(file_path: str, content_type: str) -> str:
     else:
         raise Exception(f"Unsupported content type: {content_type}")
 
-async def insert_file_to_supabase(user_id: str, filename: str, text_content: str) -> str:
+async def insert_file_to_supabase(user_id: str, filename: str, text_content: str, folder_id: str = None) -> str:
     """Insert file record into Supabase and return the file_id."""
     try:
         async with httpx.AsyncClient() as client:
@@ -124,7 +124,8 @@ async def insert_file_to_supabase(user_id: str, filename: str, text_content: str
                 json={
                     "user_id": user_id,
                     "filename": filename,
-                    "text_content": text_content
+                    "text_content": text_content,
+                    "folder_id": folder_id
                 }
             )
             
@@ -141,9 +142,30 @@ async def insert_file_to_supabase(user_id: str, filename: str, text_content: str
     except Exception as e:
         raise Exception(f"Database error: {e}")
 
+async def get_default_folder_id(user_id: str) -> str:
+    """Get the default 'Untitled' folder ID for a user"""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{settings.SUPABASE_URL}/rest/v1/folders?user_id=eq.{user_id}&name=eq.Untitled",
+                headers={
+                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                    "apikey": settings.SUPABASE_SERVICE_KEY
+                }
+            )
+            
+            if response.status_code == 200 and response.json():
+                return response.json()[0]["id"]
+            else:
+                raise Exception("Default folder not found")
+                
+    except Exception as e:
+        raise Exception(f"Error getting default folder: {e}")
+
 @router.post("/upload_file")
 async def upload_file(
     file: UploadFile = File(...),
+    folder_id: str = None,
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -220,12 +242,17 @@ async def upload_file(
                     detail="Could not extract text from file. Please check if the file is corrupted or try a different file."
                 )
         
+        # Get default folder if no folder_id provided
+        if not folder_id:
+            folder_id = await get_default_folder_id(current_user.id)
+        
         # Insert file record into Supabase
         try:
             file_id = await insert_file_to_supabase(
                 user_id=current_user.id,
                 filename=file.filename,
-                text_content=text_content
+                text_content=text_content,
+                folder_id=folder_id
             )
             
             return JSONResponse(
