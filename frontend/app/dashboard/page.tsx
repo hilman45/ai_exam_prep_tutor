@@ -279,7 +279,10 @@ export default function DashboardPage() {
             {/* Feature Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
               {/* Notes Card */}
-              <div className="bg-white rounded-lg border-2 border-black p-6 transition-all duration-200 hover:scale-105 hover:shadow-lg hover:border-cyan-500">
+              <div 
+                className="bg-white rounded-lg border-2 border-black p-6 transition-all duration-200 hover:scale-105 hover:shadow-lg hover:border-cyan-500 cursor-pointer"
+                onClick={() => router.push('/notes-generator')}
+              >
                 <div className="text-center">
                   <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{backgroundColor: '#06B6D4'}}>
                     <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -288,7 +291,7 @@ export default function DashboardPage() {
                   </div>
                   <h3 className="text-lg font-bold text-gray-800 mb-2">Notes</h3>
                   <p className="text-sm text-gray-600">
-                    Upload your lecture notes, PDFs, or documents to get started.
+                    Upload your lecture notes, PDFs, or documents.
                   </p>
                 </div>
               </div>
