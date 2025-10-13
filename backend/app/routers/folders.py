@@ -124,7 +124,7 @@ async def get_user_folders(
                 color=folder["color"],
                 created_at=folder["created_at"],
                 updated_at=folder["updated_at"],
-                materials_count=sum(materials_count.dict().values()),
+                materials_count=materials_count.summaries + materials_count.quizzes + materials_count.flashcards,  # Only count generated content
                 materials=materials_count
             ))
         
@@ -170,7 +170,7 @@ async def get_folder(
                 color=folder["color"],
                 created_at=folder["created_at"],
                 updated_at=folder["updated_at"],
-                materials_count=sum(materials_count.dict().values()),
+                materials_count=materials_count.summaries + materials_count.quizzes + materials_count.flashcards,  # Only count generated content
                 materials=materials_count
             )
             
@@ -304,9 +304,9 @@ async def get_user_folders_from_db(user_id: str) -> List[dict]:
 async def get_folder_materials_count(folder_id: str) -> MaterialCount:
     """Get count of materials in a folder"""
     async with httpx.AsyncClient() as client:
-        # Get counts for each material type
-        files_response = await client.get(
-            f"{settings.SUPABASE_URL}/rest/v1/files?folder_id=eq.{folder_id}&select=count",
+        # Get counts for each material type using HEAD requests for count
+        files_response = await client.head(
+            f"{settings.SUPABASE_URL}/rest/v1/files?folder_id=eq.{folder_id}",
             headers={
                 "apikey": settings.SUPABASE_ANON_KEY,
                 "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
@@ -314,8 +314,8 @@ async def get_folder_materials_count(folder_id: str) -> MaterialCount:
             }
         )
         
-        summaries_response = await client.get(
-            f"{settings.SUPABASE_URL}/rest/v1/summaries?folder_id=eq.{folder_id}&select=count",
+        summaries_response = await client.head(
+            f"{settings.SUPABASE_URL}/rest/v1/summaries?folder_id=eq.{folder_id}",
             headers={
                 "apikey": settings.SUPABASE_ANON_KEY,
                 "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
@@ -323,8 +323,8 @@ async def get_folder_materials_count(folder_id: str) -> MaterialCount:
             }
         )
         
-        quizzes_response = await client.get(
-            f"{settings.SUPABASE_URL}/rest/v1/quizzes?folder_id=eq.{folder_id}&select=count",
+        quizzes_response = await client.head(
+            f"{settings.SUPABASE_URL}/rest/v1/quizzes?folder_id=eq.{folder_id}",
             headers={
                 "apikey": settings.SUPABASE_ANON_KEY,
                 "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
@@ -332,8 +332,8 @@ async def get_folder_materials_count(folder_id: str) -> MaterialCount:
             }
         )
         
-        flashcards_response = await client.get(
-            f"{settings.SUPABASE_URL}/rest/v1/flashcards?folder_id=eq.{folder_id}&select=count",
+        flashcards_response = await client.head(
+            f"{settings.SUPABASE_URL}/rest/v1/flashcards?folder_id=eq.{folder_id}",
             headers={
                 "apikey": settings.SUPABASE_ANON_KEY,
                 "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",

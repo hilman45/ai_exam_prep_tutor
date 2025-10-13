@@ -1,0 +1,8 @@
+{
+  "/page": "app/page.js",
+  "/login/page": "app/login/page.js",
+  "/notes-generator/page": "app/notes-generator/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/folders/[folderId]/page": "app/folders/[folderId]/page.js",
+  "/notes/page": "app/notes/page.js"
+}

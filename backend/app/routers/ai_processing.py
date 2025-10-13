@@ -555,7 +555,7 @@ async def get_existing_summary(file_id: str, user_id: str) -> Optional[Dict[str,
                 params={
                     "file_id": f"eq.{file_id}",
                     "user_id": f"eq.{user_id}",
-                    "select": "id,summary_text,created_at",
+                    "select": "id,summary_text,created_at,custom_name",
                     "order": "created_at.desc",
                     "limit": "1"
                 }
@@ -571,7 +571,7 @@ async def get_existing_summary(file_id: str, user_id: str) -> Optional[Dict[str,
         print(f"Error fetching existing summary: {e}")
         return None
 
-async def save_summary(file_id: str, user_id: str, summary_text: str, folder_id: str = None) -> str:
+async def save_summary(file_id: str, user_id: str, summary_text: str, folder_id: str = None, custom_name: str = None) -> str:
     """Save summary to Supabase and return summary_id."""
     try:
         summary_id = str(uuid.uuid4())
@@ -590,7 +590,8 @@ async def save_summary(file_id: str, user_id: str, summary_text: str, folder_id:
                     "file_id": file_id,
                     "user_id": user_id,
                     "summary_text": summary_text,
-                    "folder_id": folder_id
+                    "folder_id": folder_id,
+                    "custom_name": custom_name
                 }
             )
             
@@ -1511,7 +1512,9 @@ async def generate_quiz(
                 print("INFO: Generating summary first for long text...")
                 chunks = chunk_text(text_content)
                 summary_text = await call_model_for_summarization(chunks, "normal")
-                await save_summary(file_id, current_user.id, summary_text)
+                # Get folder_id from the file
+                folder_id = await get_file_folder_id(file_id, current_user.id)
+                await save_summary(file_id, current_user.id, summary_text, folder_id, None)
                 text_content = summary_text
         
         # Generate quiz using AI model
@@ -1720,6 +1723,7 @@ async def test_ai_quiz():
 async def summarize_file(
     file_id: str,
     format_type: str = "normal",  # "normal" or "bullet_points"
+    custom_name: str = None,
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -1746,7 +1750,8 @@ async def summarize_file(
                 "summary_id": existing_summary["id"],
                 "summary_text": existing_summary["summary_text"],
                 "cached": True,
-                "created_at": existing_summary["created_at"]
+                "created_at": existing_summary["created_at"],
+                "custom_name": existing_summary.get("custom_name")
             }
         )
     
@@ -1776,7 +1781,7 @@ async def summarize_file(
         folder_id = await get_file_folder_id(file_id, current_user.id)
         
         # Save summary to database
-        summary_id = await save_summary(file_id, current_user.id, summary_text, folder_id)
+        summary_id = await save_summary(file_id, current_user.id, summary_text, folder_id, custom_name)
         
         return JSONResponse(
             status_code=status.HTTP_200_OK,
@@ -1785,7 +1790,8 @@ async def summarize_file(
                 "summary_text": summary_text,
                 "format_type": format_type,
                 "cached": False,
-                "filename": file_data["filename"]
+                "filename": file_data["filename"],
+                "custom_name": custom_name
             }
         )
         
@@ -1867,7 +1873,9 @@ async def generate_flashcards(
                 print("INFO: Generating summary first for long text...")
                 chunks = chunk_text(text_content)
                 summary_text = await call_model_for_summarization(chunks, "normal")
-                await save_summary(file_id, current_user.id, summary_text)
+                # Get folder_id from the file
+                folder_id = await get_file_folder_id(file_id, current_user.id)
+                await save_summary(file_id, current_user.id, summary_text, folder_id, None)
                 text_content = summary_text
                 print(f"INFO: Using summary ({len(text_content)} chars) for flashcard generation")
         
@@ -1949,4 +1957,307 @@ async def delete_file_flashcards(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Delete failed: {str(e)}"
+        )
+
+@router.get("/summaries/folder/{folder_id}")
+async def get_summaries_by_folder(
+    folder_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get all summaries for a specific folder.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            # First get all summaries for the folder
+            response = await client.get(
+                f"{settings.SUPABASE_URL}/rest/v1/summaries",
+                headers={
+                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                    "apikey": settings.SUPABASE_SERVICE_KEY,
+                    "Content-Type": "application/json"
+                },
+                params={
+                    "folder_id": f"eq.{folder_id}",
+                    "user_id": f"eq.{current_user.id}",
+                    "select": "id,file_id,summary_text,created_at,folder_id,custom_name",
+                    "order": "created_at.desc"
+                }
+            )
+            
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to fetch summaries"
+                )
+            
+            summaries = response.json()
+            
+            # Get original filenames for each summary
+            for summary in summaries:
+                try:
+                    # Always fetch the original filename from the files table
+                    file_response = await client.get(
+                        f"{settings.SUPABASE_URL}/rest/v1/files",
+                        headers={
+                            "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                            "apikey": settings.SUPABASE_SERVICE_KEY,
+                            "Content-Type": "application/json"
+                        },
+                        params={
+                            "id": f"eq.{summary['file_id']}",
+                            "select": "filename"
+                        }
+                    )
+                    
+                    if file_response.status_code == 200:
+                        files = file_response.json()
+                        if files and len(files) > 0:
+                            original_filename = files[0]['filename']
+                            summary['filename'] = original_filename  # Always original filename
+                            # Display name can be custom name or original filename
+                            summary['display_name'] = summary.get('custom_name') or original_filename
+                        else:
+                            summary['filename'] = 'Unknown file'
+                            summary['display_name'] = summary.get('custom_name') or 'Unknown file'
+                    else:
+                        summary['filename'] = 'Unknown file'
+                        summary['display_name'] = summary.get('custom_name') or 'Unknown file'
+                except Exception as file_error:
+                    print(f"Error fetching filename for file_id {summary['file_id']}: {file_error}")
+                    summary['filename'] = 'Unknown file'
+                    summary['display_name'] = summary.get('custom_name') or 'Unknown file'
+            
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content=summaries
+            )
+                
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in get_summaries_by_folder: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching summaries: {str(e)}"
+        )
+
+@router.get("/summaries/{summary_id}")
+async def get_summary_by_id(
+    summary_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get a specific summary by ID.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{settings.SUPABASE_URL}/rest/v1/summaries",
+                headers={
+                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                    "apikey": settings.SUPABASE_SERVICE_KEY,
+                    "Content-Type": "application/json"
+                },
+                params={
+                    "id": f"eq.{summary_id}",
+                    "user_id": f"eq.{current_user.id}",
+                    "select": "id,file_id,summary_text,created_at,folder_id,custom_name",
+                    "limit": "1"
+                }
+            )
+            
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to fetch summary"
+                )
+            
+            summaries = response.json()
+            if not summaries or len(summaries) == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Summary not found"
+                )
+            
+            summary = summaries[0]
+            
+            # Get original filename and set display name
+            try:
+                # Always fetch the original filename from the files table
+                file_response = await client.get(
+                    f"{settings.SUPABASE_URL}/rest/v1/files",
+                    headers={
+                        "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                        "apikey": settings.SUPABASE_SERVICE_KEY,
+                        "Content-Type": "application/json"
+                    },
+                    params={
+                        "id": f"eq.{summary['file_id']}",
+                        "select": "filename"
+                    }
+                )
+                
+                if file_response.status_code == 200:
+                    files = file_response.json()
+                    if files and len(files) > 0:
+                        original_filename = files[0]['filename']
+                        summary['filename'] = original_filename  # Always original filename
+                        # Display name can be custom name or original filename
+                        summary['display_name'] = summary.get('custom_name') or original_filename
+                    else:
+                        summary['filename'] = 'Unknown file'
+                        summary['display_name'] = summary.get('custom_name') or 'Unknown file'
+                else:
+                    summary['filename'] = 'Unknown file'
+                    summary['display_name'] = summary.get('custom_name') or 'Unknown file'
+            except Exception as file_error:
+                print(f"Error fetching filename for file_id {summary['file_id']}: {file_error}")
+                summary['filename'] = 'Unknown file'
+                summary['display_name'] = summary.get('custom_name') or 'Unknown file'
+            
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content=summary
+            )
+                
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in get_summary_by_id: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching summary: {str(e)}"
+        )
+
+@router.put("/summaries/{summary_id}")
+async def update_summary(
+    summary_id: str,
+    request_data: dict,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Update a summary's text content.
+    
+    Args:
+        summary_id: The ID of the summary to update
+        request_data: JSON body containing summary_text
+        current_user: Authenticated user
+    
+    Returns:
+        Updated summary data
+    """
+    try:
+        # Extract summary_text from request body
+        summary_text = request_data.get('summary_text')
+        if not summary_text:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="summary_text is required"
+            )
+        
+        async with httpx.AsyncClient() as client:
+            # First, verify the summary exists and belongs to the user
+            verify_response = await client.get(
+                f"{settings.SUPABASE_URL}/rest/v1/summaries",
+                headers={
+                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                    "apikey": settings.SUPABASE_SERVICE_KEY,
+                    "Content-Type": "application/json"
+                },
+                params={
+                    "id": f"eq.{summary_id}",
+                    "user_id": f"eq.{current_user.id}",
+                    "select": "id,file_id,summary_text,created_at,folder_id,custom_name",
+                    "limit": "1"
+                }
+            )
+            
+            if verify_response.status_code != 200:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to verify summary ownership"
+                )
+            
+            summaries = verify_response.json()
+            if not summaries or len(summaries) == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Summary not found or access denied"
+                )
+            
+            # Update the summary text
+            update_response = await client.patch(
+                f"{settings.SUPABASE_URL}/rest/v1/summaries",
+                headers={
+                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                    "apikey": settings.SUPABASE_SERVICE_KEY,
+                    "Content-Type": "application/json",
+                    "Prefer": "return=representation"
+                },
+                params={
+                    "id": f"eq.{summary_id}",
+                    "user_id": f"eq.{current_user.id}"
+                },
+                json={
+                    "summary_text": summary_text
+                }
+            )
+            
+            if update_response.status_code not in [200, 204]:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to update summary"
+                )
+            
+            # Return the updated summary
+            updated_summaries = update_response.json()
+            if updated_summaries and len(updated_summaries) > 0:
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content={
+                        "message": "Summary updated successfully",
+                        "summary": updated_summaries[0]
+                    }
+                )
+            else:
+                # If no data returned, fetch the updated summary
+                fetch_response = await client.get(
+                    f"{settings.SUPABASE_URL}/rest/v1/summaries",
+                    headers={
+                        "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                        "apikey": settings.SUPABASE_SERVICE_KEY,
+                        "Content-Type": "application/json"
+                    },
+                    params={
+                        "id": f"eq.{summary_id}",
+                        "user_id": f"eq.{current_user.id}",
+                        "select": "id,file_id,summary_text,created_at,folder_id,custom_name",
+                        "limit": "1"
+                    }
+                )
+                
+                if fetch_response.status_code == 200:
+                    summaries = fetch_response.json()
+                    if summaries and len(summaries) > 0:
+                        return JSONResponse(
+                            status_code=status.HTTP_200_OK,
+                            content={
+                                "message": "Summary updated successfully",
+                                "summary": summaries[0]
+                            }
+                        )
+                
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to retrieve updated summary"
+                )
+                
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in update_summary: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating summary: {str(e)}"
         )

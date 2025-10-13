@@ -2,7 +2,7 @@ import tempfile
 import os
 import uuid
 from typing import Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 import pdfplumber
 import PyPDF2
@@ -165,7 +165,7 @@ async def get_default_folder_id(user_id: str) -> str:
 @router.post("/upload_file")
 async def upload_file(
     file: UploadFile = File(...),
-    folder_id: str = None,
+    folder_id: str = Form(None),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -285,3 +285,46 @@ async def upload_file(
                 os.unlink(temp_file_path)
             except:
                 pass  # Ignore cleanup errors
+
+@router.get("/folder/{folder_id}")
+async def get_files_by_folder(
+    folder_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get all files for a specific folder.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{settings.SUPABASE_URL}/rest/v1/files",
+                headers={
+                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                    "apikey": settings.SUPABASE_SERVICE_KEY,
+                    "Content-Type": "application/json"
+                },
+                params={
+                    "folder_id": f"eq.{folder_id}",
+                    "user_id": f"eq.{current_user.id}",
+                    "select": "id,filename,text_content,created_at",
+                    "order": "created_at.desc"
+                }
+            )
+            
+            if response.status_code == 200:
+                files = response.json()
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content=files
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to fetch files"
+                )
+                
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching files: {str(e)}"
+        )
