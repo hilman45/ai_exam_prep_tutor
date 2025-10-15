@@ -7,15 +7,14 @@ import GeneratorLayout from '../../components/GeneratorLayout'
 import { supabase } from '../../lib/supabase'
 import { folderService, Folder } from '../../lib/folderService'
 
-export default function NotesGeneratorPage() {
+export default function QuizGeneratorPage() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [selectedFolder, setSelectedFolder] = useState('Untitled')
-  const [notesName, setNotesName] = useState('')
-  const [notesType, setNotesType] = useState('Short Summary')
+  const [quizName, setQuizName] = useState('')
+  const [questionCount, setQuestionCount] = useState(10)
   const [folderDropdownOpen, setFolderDropdownOpen] = useState(false)
-  const [notesTypeDropdownOpen, setNotesTypeDropdownOpen] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [folders, setFolders] = useState<Folder[]>([])
@@ -33,9 +32,6 @@ export default function NotesGeneratorPage() {
       const target = event.target as HTMLElement
       if (!target.closest('.folder-dropdown') && !target.closest('.folder-dropdown-button')) {
         setFolderDropdownOpen(false)
-      }
-      if (!target.closest('.notes-type-dropdown') && !target.closest('.notes-type-dropdown-button')) {
-        setNotesTypeDropdownOpen(false)
       }
     }
 
@@ -114,101 +110,29 @@ export default function NotesGeneratorPage() {
   const handleCloseModal = () => {
     setModalOpen(false)
     setFolderDropdownOpen(false)
-    setNotesTypeDropdownOpen(false)
   }
 
   const handleGenerate = async () => {
-    if (!uploadedFile || !notesName.trim()) {
-      setError('Please provide a file and notes name')
+    if (!uploadedFile || !quizName.trim()) {
+      setError('Please provide a file and quiz name')
       return
     }
 
-    setIsGenerating(true)
-    setError(null)
-    try {
-      // Get auth token
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
-        setError('Please log in to generate notes')
-        return
-      }
-
-      // Find the selected folder ID
-      const selectedFolderObj = folders.find(f => f.name === selectedFolder)
-      const folderId = selectedFolderObj?.id || null
-
-      // Upload file first
-      const formData = new FormData()
-      formData.append('file', uploadedFile)
-      if (folderId) {
-        formData.append('folder_id', folderId)
-      }
-      
-      const uploadResponse = await fetch('http://localhost:8000/files/upload_file', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: formData,
-      })
-
-      if (!uploadResponse.ok) {
-        const errorData = await uploadResponse.json().catch(() => ({}))
-        throw new Error(errorData.detail || 'Failed to upload file')
-      }
-
-      const uploadData = await uploadResponse.json()
-      const fileId = uploadData.file_id
-
-      // Generate summary
-      const formatType = notesType === 'Bullet Points' ? 'bullet_points' : 'normal'
-      const summaryResponse = await fetch(`http://localhost:8000/ai/summarize/${fileId}?format_type=${formatType}&custom_name=${encodeURIComponent(notesName.trim())}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-      })
-
-      if (!summaryResponse.ok) {
-        const errorData = await summaryResponse.json().catch(() => ({}))
-        throw new Error(errorData.detail || 'Failed to generate summary')
-      }
-
-      const summaryData = await summaryResponse.json()
-
-      // Navigate to notes page with generated content
-      const notesData = {
-        fileId,
-        summaryId: summaryData.summary_id,
-        notesName: notesName.trim(),
-        folderName: selectedFolder,
-        summaryText: summaryData.summary_text,
-        formatType: notesType,
-        filename: uploadedFile.name
-      }
-
-      // Store notes data in sessionStorage for the notes page
-      sessionStorage.setItem('generatedNotes', JSON.stringify(notesData))
-      
-      // Navigate to notes page
-      router.push('/notes')
-      
-      handleCloseModal()
-    } catch (error) {
-      console.error('Error generating notes:', error)
-      setError(error instanceof Error ? error.message : 'Failed to generate notes. Please try again.')
-    } finally {
-      setIsGenerating(false)
+    if (questionCount < 4 || questionCount > 20) {
+      setError('Question count must be between 4 and 20')
+      return
     }
+
+    // For now, just show a placeholder message
+    alert('Quiz generation will be implemented in the next task!')
+    handleCloseModal()
   }
 
-
   return (
-    <DashboardLayout activeTab="notes">
+    <DashboardLayout activeTab="quiz">
       <GeneratorLayout
-        title="AI Notes Generator"
-        description="Upload a document, paste your notes to automatically generate summarize notes with AI."
+        title="Quiz Generator"
+        description="Upload your lecture notes, PDFs, or documents to automatically generate practice quizzes with AI."
         onFileSelect={handleFileSelect}
         onNext={handleNext}
         uploadedFile={uploadedFile}
@@ -219,14 +143,13 @@ export default function NotesGeneratorPage() {
         onFileInputChange={handleFileInputChange}
         onRemoveFile={() => setUploadedFile(null)}
       >
-
-        {/* Generate Notes Modal */}
+        {/* Generate Quiz Modal */}
         {modalOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
               {/* Modal Header */}
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-bold text-gray-900">Generate Notes</h2>
+                <h2 className="text-lg font-bold text-gray-900">Generate Quiz</h2>
                 <button
                   onClick={handleCloseModal}
                   className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -298,52 +221,28 @@ export default function NotesGeneratorPage() {
                   </label>
                   <input
                     type="text"
-                    value={notesName}
-                    onChange={(e) => setNotesName(e.target.value)}
+                    value={quizName}
+                    onChange={(e) => setQuizName(e.target.value)}
                     className="w-full px-3 py-2 border border-black rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                    placeholder="Enter notes name"
+                    placeholder="Enter quiz name"
                   />
                 </div>
 
-                {/* Notes Type Dropdown */}
+                {/* Question Count Input */}
                 <div>
                   <label className="block text-sm font-bold text-gray-900 mb-2">
-                    Notes Type:
+                    How many quiz questions?
                   </label>
-                  <div className="relative">
-                    <button
-                      className="notes-type-dropdown-button w-full px-3 py-2 border border-black rounded-lg text-left flex items-center justify-between hover:bg-gray-50 transition-colors"
-                      onClick={() => setNotesTypeDropdownOpen(!notesTypeDropdownOpen)}
-                    >
-                      <span className="text-gray-900">{notesType}</span>
-                      <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                    
-                    {notesTypeDropdownOpen && (
-                      <div className="notes-type-dropdown absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50">
-                        <button
-                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors rounded-t-lg"
-                          onClick={() => {
-                            setNotesType('Short Summary')
-                            setNotesTypeDropdownOpen(false)
-                          }}
-                        >
-                          Short Summary
-                        </button>
-                        <button
-                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors rounded-b-lg"
-                          onClick={() => {
-                            setNotesType('Bullet Points')
-                            setNotesTypeDropdownOpen(false)
-                          }}
-                        >
-                          Bullet Points
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                  <input
+                    type="number"
+                    min="4"
+                    max="20"
+                    value={questionCount}
+                    onChange={(e) => setQuestionCount(parseInt(e.target.value) || 4)}
+                    className="w-full px-3 py-2 border border-black rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    placeholder="Enter number of questions (4-20)"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Minimum: 4, Maximum: 20</p>
                 </div>
               </div>
 
