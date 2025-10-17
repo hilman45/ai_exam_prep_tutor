@@ -4,12 +4,14 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { folderService, Folder } from '../../../lib/folderService'
 import { notesService, Summary } from '../../../lib/notesService'
+import { quizService, Quiz } from '../../../lib/quizService'
 import DashboardLayout from '../../../components/DashboardLayout'
 
 export default function FolderPage() {
   const [folder, setFolder] = useState<Folder | null>(null)
   const [activeTab, setActiveTab] = useState<'notes' | 'quiz' | 'flashcards'>('notes')
   const [summaries, setSummaries] = useState<Summary[]>([])
+  const [quizzes, setQuizzes] = useState<Quiz[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const params = useParams()
@@ -34,8 +36,11 @@ export default function FolderPage() {
       const foundFolder = userFolders.find(f => f.id === folderId)
       if (foundFolder) {
         setFolder(foundFolder)
-        // Load summaries for this folder
-        await loadSummaries(folderId)
+        // Load summaries and quizzes for this folder
+        await Promise.all([
+          loadSummaries(folderId),
+          loadQuizzes(folderId)
+        ])
       } else {
         // Folder not found, redirect to dashboard
         router.push('/dashboard')
@@ -60,8 +65,24 @@ export default function FolderPage() {
     }
   }
 
+  const loadQuizzes = async (folderId: string) => {
+    try {
+      const folderQuizzes = await quizService.getQuizzesByFolder(folderId)
+      console.log('Fetched quizzes:', folderQuizzes) // Debug log
+      setQuizzes(folderQuizzes)
+    } catch (error) {
+      console.error('Error loading quizzes:', error)
+      setQuizzes([])
+      // Don't set error for quizzes since the endpoint might not be implemented yet
+    }
+  }
+
   const handleCreateNotes = () => {
     router.push('/notes-generator')
+  }
+
+  const handleCreateQuiz = () => {
+    router.push('/quiz-generator')
   }
 
   const handleOpenNotes = (summary: Summary) => {
@@ -74,6 +95,38 @@ export default function FolderPage() {
     
     router.push(`/notes?${urlParams.toString()}`)
   }
+
+  const handleOpenQuiz = (quiz: Quiz) => {
+    // Store quiz data in sessionStorage for the quiz edit page
+    const quizData = {
+      fileId: quiz.file_id,
+      quizId: quiz.id,
+      quizName: quiz.custom_name || quiz.display_name || 'Generated Quiz',
+      folderName: folderName,
+      questions: quiz.questions,
+      questionCount: quiz.questions?.length || 0,
+      filename: quiz.filename || 'Unknown File',
+      cached: false,
+      createdAt: quiz.created_at
+    }
+    
+    sessionStorage.setItem('generatedQuiz', JSON.stringify(quizData))
+    
+    // Navigate to quiz edit page
+    router.push('/quiz-edit')
+  }
+
+  // Refresh quizzes when returning from quiz edit
+  useEffect(() => {
+    const handleFocus = () => {
+      if (params.folderId && activeTab === 'quiz') {
+        loadQuizzes(params.folderId as string)
+      }
+    }
+
+    window.addEventListener('focus', handleFocus)
+    return () => window.removeEventListener('focus', handleFocus)
+  }, [params.folderId, activeTab])
 
   return (
     <DashboardLayout 
@@ -250,28 +303,110 @@ export default function FolderPage() {
               )}
 
               {activeTab === 'quiz' && (
-                <div className="text-center">
-                  {/* Quiz Empty State */}
-                  <div className="w-24 h-24 mx-auto mb-6 flex items-center justify-center">
-                    <svg className="w-16 h-16" style={{color: '#FACC15'}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                    </svg>
-                  </div>
-                  <p className="text-gray-600 mb-6 text-lg leading-relaxed">
-                    Generate practice quizzes from your uploaded materials to test your knowledge.
-                  </p>
-                  <button
-                    className="text-white px-8 py-3 rounded-lg font-medium transition-colors"
-                    style={{backgroundColor: '#0f5bff'}}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0d4ed8'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0f5bff'}
-                    onClick={() => {
-                      // TODO: Implement quiz creation
-                      console.log('Create quiz clicked')
-                    }}
-                  >
-                    Create
-                  </button>
+                <div>
+                  {loading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                      <span className="ml-2 text-gray-600">Loading quizzes...</span>
+                    </div>
+                  ) : quizzes.length === 0 ? (
+                    <div className="text-center">
+                      {/* Quiz Empty State */}
+                      <div className="w-24 h-24 mx-auto mb-6 flex items-center justify-center">
+                        <svg className="w-16 h-16" style={{color: '#FACC15'}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                      </div>
+                      <p className="text-gray-600 mb-6 text-lg leading-relaxed">
+                        Generate practice quizzes from your uploaded materials to test your knowledge.
+                      </p>
+                      <button
+                        onClick={handleCreateQuiz}
+                        className="text-white px-8 py-3 rounded-lg font-medium transition-colors"
+                        style={{backgroundColor: '#0f5bff'}}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0d4ed8'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0f5bff'}
+                      >
+                        Create
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      {/* Quiz List */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {quizzes.map((quiz) => (
+                          <div
+                            key={quiz.id}
+                            className="bg-white border border-slate-200 rounded-lg p-4 hover:brightness-95 hover:shadow-sm transition-all max-w-md"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                {/* Quiz Name */}
+                                <h3 className="font-medium text-slate-800 mb-2">
+                                  {quiz.custom_name || quiz.display_name || quiz.filename || 'Generated Quiz'}
+                                </h3>
+                                
+                                {/* Source */}
+                                <div className="text-sm text-slate-600 mb-2">
+                                  Source: {quiz.filename || 'Unknown file'}
+                                </div>
+                                
+                                {/* Questions Count */}
+                                <div className="text-sm text-slate-600 mb-2">
+                                  Questions: {quiz.questions?.length || 0}
+                                </div>
+                                
+                                {/* Date */}
+                                <div className="text-sm text-slate-500">
+                                  {new Date(quiz.created_at).toLocaleDateString('en-US', {
+                                    month: '2-digit',
+                                    day: '2-digit',
+                                    year: 'numeric'
+                                  })}
+                                </div>
+                              </div>
+                              
+                              {/* Open Button */}
+                              <div className="ml-4 flex-shrink-0">
+                                <button
+                                  onClick={() => handleOpenQuiz(quiz)}
+                                  className="px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 border-2"
+                                  style={{
+                                    borderColor: '#FACC15',
+                                    backgroundColor: '#F3F3F3',
+                                    color: '#FACC15'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.backgroundColor = '#FACC15'
+                                    e.currentTarget.style.color = '#FFFFFF'
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.backgroundColor = '#F3F3F3'
+                                    e.currentTarget.style.color = '#FACC15'
+                                  }}
+                                >
+                                  Open
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      {/* Create New Button */}
+                      <div className="mt-6 text-center">
+                        <button
+                          onClick={handleCreateQuiz}
+                          className="text-white px-6 py-2 rounded-lg font-medium transition-colors"
+                          style={{backgroundColor: '#0f5bff'}}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0d4ed8'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0f5bff'}
+                        >
+                          Create New Quiz
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

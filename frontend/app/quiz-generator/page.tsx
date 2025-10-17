@@ -6,6 +6,7 @@ import DashboardLayout from '../../components/DashboardLayout'
 import GeneratorLayout from '../../components/GeneratorLayout'
 import { supabase } from '../../lib/supabase'
 import { folderService, Folder } from '../../lib/folderService'
+import { quizService, QuizQuestion } from '../../lib/quizService'
 
 export default function QuizGeneratorPage() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
@@ -123,9 +124,71 @@ export default function QuizGeneratorPage() {
       return
     }
 
-    // For now, just show a placeholder message
-    alert('Quiz generation will be implemented in the next task!')
-    handleCloseModal()
+    setIsGenerating(true)
+    setError(null)
+    try {
+      // Get auth token
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        setError('Please log in to generate quiz')
+        return
+      }
+
+      // Find the selected folder ID
+      const selectedFolderObj = folders.find(f => f.name === selectedFolder)
+      const folderId = selectedFolderObj?.id || null
+
+      // Upload file first
+      const formData = new FormData()
+      formData.append('file', uploadedFile)
+      if (folderId) {
+        formData.append('folder_id', folderId)
+      }
+      
+      const uploadResponse = await fetch('http://localhost:8000/files/upload_file', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: formData,
+      })
+
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.json().catch(() => ({}))
+        throw new Error(errorData.detail || 'Failed to upload file')
+      }
+
+      const uploadData = await uploadResponse.json()
+      const fileId = uploadData.file_id
+
+      // Generate quiz
+      const quizResponse = await quizService.generateQuiz(fileId, questionCount, quizName.trim())
+
+      // Navigate to quiz edit page with generated content
+      const quizData = {
+        fileId,
+        quizId: quizResponse.quiz_id,
+        quizName: quizName.trim(),
+        folderName: selectedFolder,
+        questions: quizResponse.questions,
+        questionCount: quizResponse.question_count,
+        filename: uploadedFile.name,
+        cached: quizResponse.cached
+      }
+
+      // Store quiz data in sessionStorage for the quiz edit page
+      sessionStorage.setItem('generatedQuiz', JSON.stringify(quizData))
+      
+      // Navigate to quiz edit page
+      router.push('/quiz-edit')
+      
+      handleCloseModal()
+    } catch (error) {
+      console.error('Error generating quiz:', error)
+      setError(error instanceof Error ? error.message : 'Failed to generate quiz. Please try again.')
+    } finally {
+      setIsGenerating(false)
+    }
   }
 
   return (

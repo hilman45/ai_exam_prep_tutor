@@ -607,17 +607,18 @@ async def save_summary(file_id: str, user_id: str, summary_text: str, folder_id:
 
 # Quiz Generation Functions
 
-def get_quiz_prompt(text: str) -> str:
+def get_quiz_prompt(text: str, question_count: int = 4) -> str:
     """
     Generate prompt for quiz generation (fallback method).
     
     Args:
         text: The text to generate questions from
+        question_count: Number of questions to generate
         
     Returns:
         Formatted prompt for the model
     """
-    return f"""Create 4 multiple choice questions from this text. Each question must have exactly 4 options and one correct answer.
+    return f"""Create {question_count} multiple choice questions from this text. Each question must have exactly 4 options and one correct answer.
 
 Text: {text}
 
@@ -714,12 +715,13 @@ def clean_quiz_json(raw_text: str) -> str:
     
     return cleaned
 
-async def call_model_for_quiz_generation(text: str) -> List[Dict[str, Any]]:
+async def call_model_for_quiz_generation(text: str, question_count: int = 4) -> List[Dict[str, Any]]:
     """
     Call AI model for quiz generation with Groq API, local transformers, or Hugging Face API fallback.
     
     Args:
         text: The text to generate questions from
+        question_count: Number of questions to generate
         
     Returns:
         List of validated quiz questions
@@ -727,31 +729,31 @@ async def call_model_for_quiz_generation(text: str) -> List[Dict[str, Any]]:
     try:
         # Try Groq API first (fastest and most reliable)
         if settings.GROQ_API_KEY:
-            return await _generate_quiz_with_groq_api(text)
+            return await _generate_quiz_with_groq_api(text, question_count)
     except Exception as groq_error:
         print(f"Groq API failed: {groq_error}")
     
     try:
         # Fallback to local transformers
-        return await _generate_quiz_with_local_model(text)
+        return await _generate_quiz_with_local_model(text, question_count)
     except Exception as local_error:
         print(f"Local model failed: {local_error}")
         
         # Fallback to Hugging Face API if available
         if settings.HUGGINGFACE_API_KEY:
             try:
-                return await _generate_quiz_with_hf_api(text)
+                return await _generate_quiz_with_hf_api(text, question_count)
             except Exception as api_error:
                 print(f"HF API failed: {api_error}")
                 raise Exception(f"All AI services failed. Groq: {groq_error if 'groq_error' in locals() else 'N/A'}, Local: {local_error}, HF API: {api_error}")
         else:
             raise Exception(f"All AI services failed. Groq: {groq_error if 'groq_error' in locals() else 'N/A'}, Local: {local_error}, No HF API key available")
 
-async def _generate_quiz_with_groq_api(text: str) -> List[Dict[str, Any]]:
+async def _generate_quiz_with_groq_api(text: str, question_count: int = 4) -> List[Dict[str, Any]]:
     """Generate quiz using Groq API with LLaMA 3.3 70B model."""
     try:
         async with httpx.AsyncClient() as client:
-            prompt = get_quiz_prompt(text)
+            prompt = get_quiz_prompt(text, question_count)
             
             response = await client.post(
                 "https://api.groq.com/openai/v1/chat/completions",
@@ -790,37 +792,37 @@ async def _generate_quiz_with_groq_api(text: str) -> List[Dict[str, Any]]:
                         return validated_quiz
                     else:
                         print("WARNING: Groq API returned invalid quiz format, using fallback")
-                        return await _generate_fallback_quiz(text)
+                        return await _generate_fallback_quiz(text, question_count)
                 else:
                     print("ERROR: Groq API returned unexpected format")
-                    return await _generate_fallback_quiz(text)
+                    return await _generate_fallback_quiz(text, question_count)
             else:
                 print(f"ERROR: Groq API error: {response.status_code}")
-                return await _generate_fallback_quiz(text)
+                return await _generate_fallback_quiz(text, question_count)
                 
     except Exception as e:
         raise Exception(f"Groq API error: {str(e)}")
 
-async def _generate_quiz_with_local_model(text: str) -> List[Dict[str, Any]]:
+async def _generate_quiz_with_local_model(text: str, question_count: int = 4) -> List[Dict[str, Any]]:
     """Generate quiz using fallback method (no AI models configured)."""
     try:
         print("INFO: No AI models configured, using fallback quiz generation")
-        return await _generate_fallback_quiz(text)
+        return await _generate_fallback_quiz(text, question_count)
         
     except ImportError as e:
         print(f"ERROR: Transformers import failed: {e}")
         print("FALLBACK: Using fallback quiz generation")
-        return await _generate_fallback_quiz(text)
+        return await _generate_fallback_quiz(text, question_count)
     except Exception as e:
         print(f"ERROR: Local model error: {e}")
         print("FALLBACK: Using fallback quiz generation")
-        return await _generate_fallback_quiz(text)
+        return await _generate_fallback_quiz(text, question_count)
 
-async def _generate_quiz_with_hf_api(text: str) -> List[Dict[str, Any]]:
+async def _generate_quiz_with_hf_api(text: str, question_count: int = 4) -> List[Dict[str, Any]]:
     """Generate quiz using Hugging Face Inference API."""
     try:
         async with httpx.AsyncClient() as client:
-            prompt = get_quiz_prompt(text)
+            prompt = get_quiz_prompt(text, question_count)
             
             # Try twice with different parameters
             for attempt in range(2):
@@ -860,12 +862,12 @@ async def _generate_quiz_with_hf_api(text: str) -> List[Dict[str, Any]]:
                     print(f"ERROR: HF API attempt {attempt + 1} error: {e}")
             
             # If API fails, use fallback
-            return await _generate_fallback_quiz(text)
+            return await _generate_fallback_quiz(text, question_count)
                 
     except Exception as e:
         raise Exception(f"HF API error: {str(e)}")
 
-async def _generate_fallback_quiz(text: str) -> List[Dict[str, Any]]:
+async def _generate_fallback_quiz(text: str, question_count: int = 4) -> List[Dict[str, Any]]:
     """Generate intelligent fallback quiz when AI models fail."""
     try:
         print("WARNING: Using intelligent fallback quiz generation")
@@ -879,7 +881,7 @@ async def _generate_fallback_quiz(text: str) -> List[Dict[str, Any]]:
         questions = []
         
         # Generate questions based on content analysis
-        for i, sentence in enumerate(sentences[:4]):
+        for i, sentence in enumerate(sentences[:question_count]):
             if len(sentence) > 30:
                 words = sentence.split()
                 if len(words) > 4:
@@ -919,7 +921,7 @@ async def _generate_fallback_quiz(text: str) -> List[Dict[str, Any]]:
             frequent_words = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)[:3]
             
             for word, freq in frequent_words:
-                if len(questions) >= 4:
+                if len(questions) >= question_count:
                     break
                     
                 questions.append({
@@ -933,8 +935,8 @@ async def _generate_fallback_quiz(text: str) -> List[Dict[str, Any]]:
                     "answer_index": 0
                 })
         
-        # Ensure we have at least 3 questions
-        while len(questions) < 3:
+        # Ensure we have at least the requested number of questions
+        while len(questions) < question_count:
             questions.append({
                 "question": f"What is the main topic discussed in this text?",
                 "options": [
@@ -947,7 +949,7 @@ async def _generate_fallback_quiz(text: str) -> List[Dict[str, Any]]:
             })
         
         print(f"WARNING: Intelligent fallback quiz generated with {len(questions)} questions")
-        return questions[:5]  # Return max 5 questions
+        return questions[:question_count]  # Return requested number of questions
         
     except Exception as e:
         print(f"ERROR: Even fallback quiz failed: {e}")
@@ -1000,7 +1002,7 @@ async def get_existing_quiz(file_id: str, user_id: str) -> Optional[Dict[str, An
         print(f"Error fetching existing quiz: {e}")
         return None
 
-async def save_quiz(file_id: str, user_id: str, questions: List[Dict[str, Any]], folder_id: str = None) -> str:
+async def save_quiz(file_id: str, user_id: str, questions: List[Dict[str, Any]], folder_id: str = None, custom_name: str = None) -> str:
     """Save quiz to Supabase and return quiz_id."""
     try:
         quiz_id = str(uuid.uuid4())
@@ -1019,7 +1021,8 @@ async def save_quiz(file_id: str, user_id: str, questions: List[Dict[str, Any]],
                     "file_id": file_id,
                     "user_id": user_id,
                     "questions": questions,
-                    "folder_id": folder_id
+                    "folder_id": folder_id,
+                    "custom_name": custom_name
                 }
             )
             
@@ -1455,6 +1458,8 @@ async def save_flashcards(file_id: str, user_id: str, cards: List[Dict[str, Any]
 @router.post("/quiz/{file_id}")
 async def generate_quiz(
     file_id: str,
+    question_count: int = Query(4, ge=4, le=20),
+    custom_name: str = Query(None),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -1518,7 +1523,7 @@ async def generate_quiz(
                 text_content = summary_text
         
         # Generate quiz using AI model
-        questions = await call_model_for_quiz_generation(text_content)
+        questions = await call_model_for_quiz_generation(text_content, question_count)
         
         # Validate that we have enough questions
         if len(questions) < 3:
@@ -1531,7 +1536,7 @@ async def generate_quiz(
         folder_id = await get_file_folder_id(file_id, current_user.id)
         
         # Save quiz to database
-        quiz_id = await save_quiz(file_id, current_user.id, questions, folder_id)
+        quiz_id = await save_quiz(file_id, current_user.id, questions, folder_id, custom_name)
         
         return JSONResponse(
             status_code=status.HTTP_200_OK,
@@ -1558,6 +1563,135 @@ async def generate_quiz(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Quiz generation failed: {error_msg}"
             )
+
+@router.get("/quiz/folder/{folder_id}")
+async def get_quizzes_by_folder(
+    folder_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get all quizzes for a specific folder.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{settings.SUPABASE_URL}/rest/v1/quizzes",
+                headers={
+                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                    "apikey": settings.SUPABASE_SERVICE_KEY,
+                    "Content-Type": "application/json"
+                },
+                params={
+                    "folder_id": f"eq.{folder_id}",
+                    "user_id": f"eq.{current_user.id}",
+                    "select": "id,file_id,user_id,questions,folder_id,created_at,custom_name",
+                    "order": "created_at.desc"
+                }
+            )
+            
+            if response.status_code == 200:
+                quizzes = response.json()
+                
+                # Get filename for each quiz by fetching the associated file
+                for quiz in quizzes:
+                    try:
+                        file_response = await client.get(
+                            f"{settings.SUPABASE_URL}/rest/v1/files",
+                            headers={
+                                "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                                "apikey": settings.SUPABASE_SERVICE_KEY,
+                                "Content-Type": "application/json"
+                            },
+                            params={
+                                "id": f"eq.{quiz['file_id']}",
+                                "user_id": f"eq.{current_user.id}",
+                                "select": "filename"
+                            }
+                        )
+                        
+                        if file_response.status_code == 200 and file_response.json():
+                            quiz['filename'] = file_response.json()[0]['filename']
+                        else:
+                            quiz['filename'] = 'Unknown file'
+                    except:
+                        quiz['filename'] = 'Unknown file'
+                
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content=quizzes
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to fetch quizzes"
+                )
+                
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching quizzes: {str(e)}"
+        )
+
+@router.put("/quiz/{quiz_id}")
+async def update_quiz(
+    quiz_id: str,
+    quiz_update: dict,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Update an existing quiz with new questions.
+    """
+    try:
+        # Verify ownership first
+        await verify_resource_ownership(quiz_id, "quizzes", current_user.id)
+        
+        # Update the quiz in the database
+        async with httpx.AsyncClient() as client:
+            response = await client.patch(
+                f"{settings.SUPABASE_URL}/rest/v1/quizzes",
+                headers={
+                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                    "apikey": settings.SUPABASE_SERVICE_KEY,
+                    "Content-Type": "application/json",
+                    "Prefer": "return=representation"
+                },
+                params={
+                    "id": f"eq.{quiz_id}",
+                    "user_id": f"eq.{current_user.id}"
+                },
+                json={
+                    "questions": quiz_update.get("questions", [])
+                }
+            )
+            
+            if response.status_code == 200:
+                updated_quiz = response.json()
+                if updated_quiz:
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "message": "Quiz updated successfully",
+                            "quiz": updated_quiz[0]
+                        }
+                    )
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="Quiz not found"
+                    )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to update quiz"
+                )
+                
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating quiz: {str(e)}"
+        )
 
 @router.delete("/quiz/{file_id}")
 async def delete_file_quiz(
