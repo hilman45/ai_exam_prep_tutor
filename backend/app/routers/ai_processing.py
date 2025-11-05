@@ -1422,12 +1422,24 @@ async def get_file_folder_id(file_id: str, user_id: str) -> str:
         print(f"Error fetching file folder_id: {e}")
         return None
 
-async def save_flashcards(file_id: str, user_id: str, cards: List[Dict[str, Any]], folder_id: str = None) -> str:
+async def save_flashcards(file_id: str, user_id: str, cards: List[Dict[str, Any]], folder_id: str = None, custom_name: str = None) -> str:
     """Save flashcards to Supabase and return flashcard_id."""
     try:
         flashcard_id = str(uuid.uuid4())
         
         async with httpx.AsyncClient() as client:
+            json_data = {
+                "id": flashcard_id,
+                "file_id": file_id,
+                "user_id": user_id,
+                "cards": cards,
+                "folder_id": folder_id
+            }
+            
+            # Add custom_name if provided
+            if custom_name:
+                json_data["custom_name"] = custom_name
+            
             response = await client.post(
                 f"{settings.SUPABASE_URL}/rest/v1/flashcards",
                 headers={
@@ -1436,13 +1448,7 @@ async def save_flashcards(file_id: str, user_id: str, cards: List[Dict[str, Any]
                     "Content-Type": "application/json",
                     "Prefer": "return=minimal"
                 },
-                json={
-                    "id": flashcard_id,
-                    "file_id": file_id,
-                    "user_id": user_id,
-                    "cards": cards,
-                    "folder_id": folder_id
-                }
+                json=json_data
             )
             
             if response.status_code not in [200, 201]:
@@ -1630,6 +1636,74 @@ async def get_quizzes_by_folder(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error fetching quizzes: {str(e)}"
+        )
+
+@router.get("/flashcards/folder/{folder_id}")
+async def get_flashcards_by_folder(
+    folder_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get all flashcards for a specific folder.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{settings.SUPABASE_URL}/rest/v1/flashcards",
+                headers={
+                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                    "apikey": settings.SUPABASE_SERVICE_KEY,
+                    "Content-Type": "application/json"
+                },
+                params={
+                    "folder_id": f"eq.{folder_id}",
+                    "user_id": f"eq.{current_user.id}",
+                    "select": "id,file_id,user_id,cards,folder_id,created_at,custom_name",
+                    "order": "created_at.desc"
+                }
+            )
+            
+            if response.status_code == 200:
+                flashcards = response.json()
+                
+                # Get filename for each flashcard by fetching the associated file
+                for flashcard in flashcards:
+                    try:
+                        file_response = await client.get(
+                            f"{settings.SUPABASE_URL}/rest/v1/files",
+                            headers={
+                                "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                                "apikey": settings.SUPABASE_SERVICE_KEY,
+                                "Content-Type": "application/json"
+                            },
+                            params={
+                                "id": f"eq.{flashcard['file_id']}",
+                                "user_id": f"eq.{current_user.id}",
+                                "select": "filename"
+                            }
+                        )
+                        
+                        if file_response.status_code == 200 and file_response.json():
+                            flashcard['filename'] = file_response.json()[0]['filename']
+                        else:
+                            flashcard['filename'] = 'Unknown file'
+                    except:
+                        flashcard['filename'] = 'Unknown file'
+                
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content=flashcards
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to fetch flashcards"
+                )
+                
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching flashcards: {str(e)}"
         )
 
 @router.put("/quiz/{quiz_id}")
@@ -1946,6 +2020,7 @@ async def summarize_file(
 async def generate_flashcards(
     file_id: str,
     count: int = Query(default=10, ge=5, le=30),
+    custom_name: str = Query(None),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -1954,6 +2029,7 @@ async def generate_flashcards(
     Args:
         file_id: The ID of the file to generate flashcards from
         count: Number of flashcards to generate (min: 5, max: 30, default: 10)
+        custom_name: Optional custom name for the flashcard set
         current_user: Authenticated user
     
     - Checks if flashcards already exist and returns cached version
@@ -1975,7 +2051,8 @@ async def generate_flashcards(
                 "cards": existing_flashcards["cards"],
                 "card_count": len(existing_flashcards["cards"]),
                 "cached": True,
-                "created_at": existing_flashcards["created_at"]
+                "created_at": existing_flashcards["created_at"],
+                "custom_name": existing_flashcards.get("custom_name")
             }
         )
     
@@ -2028,7 +2105,7 @@ async def generate_flashcards(
         folder_id = await get_file_folder_id(file_id, current_user.id)
         
         # Save flashcards to database
-        flashcard_id = await save_flashcards(file_id, current_user.id, cards, folder_id)
+        flashcard_id = await save_flashcards(file_id, current_user.id, cards, folder_id, custom_name)
         
         return JSONResponse(
             status_code=status.HTTP_200_OK,
@@ -2037,7 +2114,8 @@ async def generate_flashcards(
                 "cards": cards,
                 "card_count": len(cards),
                 "cached": False,
-                "filename": file_data["filename"]
+                "filename": file_data["filename"],
+                "custom_name": custom_name
             }
         )
         

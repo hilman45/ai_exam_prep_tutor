@@ -115,7 +115,10 @@ export default function DashboardPage() {
               </div>
 
               {/* Flashcards Card */}
-              <div className="bg-white rounded-lg border-2 border-black p-6 transition-all duration-200 hover:scale-105 hover:shadow-lg hover:border-red-500">
+              <div 
+                className="bg-white rounded-lg border-2 border-black p-6 transition-all duration-200 hover:scale-105 hover:shadow-lg hover:border-red-500 cursor-pointer"
+                onClick={() => router.push('/flashcard-generator')}
+              >
                 <div className="text-center">
                   <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{backgroundColor: '#EF4444'}}>
                     <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -5,15 +5,24 @@ import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { folderService, Folder } from '../../../lib/folderService'
 import { notesService, Summary } from '../../../lib/notesService'
 import { quizService, Quiz } from '../../../lib/quizService'
+import { flashcardService, FlashcardSet } from '../../../lib/flashcardService'
 import DashboardLayout from '../../../components/DashboardLayout'
+import KebabMenu from '../../../components/KebabMenu'
 
 export default function FolderPage() {
   const [folder, setFolder] = useState<Folder | null>(null)
   const [activeTab, setActiveTab] = useState<'notes' | 'quiz' | 'flashcards'>('notes')
   const [summaries, setSummaries] = useState<Summary[]>([])
   const [quizzes, setQuizzes] = useState<Quiz[]>([])
+  const [flashcards, setFlashcards] = useState<FlashcardSet[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    type: 'note' | 'quiz' | 'flashcard' | null
+    id: string | null
+    name: string | null
+  }>({ type: null, id: null, name: null })
+  const [deleting, setDeleting] = useState(false)
   const params = useParams()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -39,7 +48,8 @@ export default function FolderPage() {
         // Load summaries and quizzes for this folder
         await Promise.all([
           loadSummaries(folderId),
-          loadQuizzes(folderId)
+          loadQuizzes(folderId),
+          loadFlashcards(folderId)
         ])
       } else {
         // Folder not found, redirect to dashboard
@@ -77,12 +87,28 @@ export default function FolderPage() {
     }
   }
 
+  const loadFlashcards = async (folderId: string) => {
+    try {
+      const folderFlashcards = await flashcardService.getFlashcardsByFolder(folderId)
+      console.log('Fetched flashcards:', folderFlashcards) // Debug log
+      setFlashcards(folderFlashcards)
+    } catch (error) {
+      console.error('Error loading flashcards:', error)
+      setFlashcards([])
+      // Don't set error for flashcards since the endpoint might not be implemented yet
+    }
+  }
+
   const handleCreateNotes = () => {
     router.push('/notes-generator')
   }
 
   const handleCreateQuiz = () => {
     router.push('/quiz-generator')
+  }
+
+  const handleCreateFlashcards = () => {
+    router.push('/flashcard-generator')
   }
 
   const handleOpenNotes = (summary: Summary) => {
@@ -116,11 +142,89 @@ export default function FolderPage() {
     router.push('/quiz-edit')
   }
 
+  const handleOpenFlashcards = (flashcard: FlashcardSet) => {
+    // Store flashcard data in sessionStorage for the flashcard edit page
+    const flashcardData = {
+      fileId: flashcard.file_id,
+      flashcardId: flashcard.id,
+      flashcardName: flashcard.custom_name || flashcard.filename || 'Generated Flashcards',
+      folderName: folderName,
+      cards: flashcard.cards,
+      cardCount: flashcard.cards?.length || 0,
+      filename: flashcard.filename || 'Unknown File',
+      cached: false,
+      createdAt: flashcard.created_at
+    }
+    
+    sessionStorage.setItem('generatedFlashcards', JSON.stringify(flashcardData))
+    
+    // Navigate to flashcard edit page
+    router.push('/flashcard-edit')
+  }
+
+  const handleDeleteNote = (summary: Summary) => {
+    setDeleteConfirm({
+      type: 'note',
+      id: summary.id,
+      name: summary.custom_name || summary.display_name || summary.filename || 'this note'
+    })
+  }
+
+  const handleDeleteQuiz = (quiz: Quiz) => {
+    setDeleteConfirm({
+      type: 'quiz',
+      id: quiz.id,
+      name: quiz.custom_name || quiz.display_name || quiz.filename || 'this quiz'
+    })
+  }
+
+  const handleDeleteFlashcard = (flashcard: FlashcardSet) => {
+    setDeleteConfirm({
+      type: 'flashcard',
+      id: flashcard.id,
+      name: flashcard.custom_name || flashcard.filename || 'this flashcard set'
+    })
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm.id || !deleteConfirm.type) return
+
+    try {
+      setDeleting(true)
+      
+      if (deleteConfirm.type === 'note') {
+        await notesService.deleteSummary(deleteConfirm.id)
+        setSummaries(summaries.filter(s => s.id !== deleteConfirm.id))
+      } else if (deleteConfirm.type === 'quiz') {
+        await quizService.deleteQuiz(deleteConfirm.id)
+        setQuizzes(quizzes.filter(q => q.id !== deleteConfirm.id))
+      } else if (deleteConfirm.type === 'flashcard') {
+        await flashcardService.deleteFlashcard(deleteConfirm.id)
+        setFlashcards(flashcards.filter(f => f.id !== deleteConfirm.id))
+      }
+
+      setDeleteConfirm({ type: null, id: null, name: null })
+    } catch (error) {
+      console.error('Error deleting:', error)
+      setError(`Failed to delete ${deleteConfirm.type}. Please try again.`)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const cancelDelete = () => {
+    setDeleteConfirm({ type: null, id: null, name: null })
+  }
+
   // Refresh quizzes when returning from quiz edit
   useEffect(() => {
     const handleFocus = () => {
-      if (params.folderId && activeTab === 'quiz') {
-        loadQuizzes(params.folderId as string)
+      if (params.folderId) {
+        if (activeTab === 'quiz') {
+          loadQuizzes(params.folderId as string)
+        } else if (activeTab === 'flashcards') {
+          loadFlashcards(params.folderId as string)
+        }
       }
     }
 
@@ -258,8 +362,8 @@ export default function FolderPage() {
                                 </div>
                               </div>
                               
-                              {/* Open Button */}
-                              <div className="ml-4 flex-shrink-0">
+                              {/* Action Buttons */}
+                              <div className="ml-4 flex-shrink-0 flex items-center gap-2">
                                 <button
                                   onClick={() => handleOpenNotes(summary)}
                                   className="px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 border-2"
@@ -279,6 +383,10 @@ export default function FolderPage() {
                                 >
                                   Open
                                 </button>
+                                <KebabMenu
+                                  onDelete={() => handleDeleteNote(summary)}
+                                  itemName="note"
+                                />
                               </div>
                             </div>
                           </div>
@@ -366,8 +474,8 @@ export default function FolderPage() {
                                 </div>
                               </div>
                               
-                              {/* Open Button */}
-                              <div className="ml-4 flex-shrink-0">
+                              {/* Action Buttons */}
+                              <div className="ml-4 flex-shrink-0 flex items-center gap-2">
                                 <button
                                   onClick={() => handleOpenQuiz(quiz)}
                                   className="px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 border-2"
@@ -387,6 +495,10 @@ export default function FolderPage() {
                                 >
                                   Open
                                 </button>
+                                <KebabMenu
+                                  onDelete={() => handleDeleteQuiz(quiz)}
+                                  itemName="quiz"
+                                />
                               </div>
                             </div>
                           </div>
@@ -411,32 +523,160 @@ export default function FolderPage() {
               )}
 
               {activeTab === 'flashcards' && (
-                <div className="text-center">
-                  {/* Flashcards Empty State */}
-                  <div className="w-24 h-24 mx-auto mb-6 flex items-center justify-center">
-                    <svg className="w-16 h-16" style={{color: '#EF4444'}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                    </svg>
-                  </div>
-                  <p className="text-gray-600 mb-6 text-lg leading-relaxed">
-                    Create flashcards to memorize key concepts and terms from your study materials.
-                  </p>
-                  <button
-                    className="text-white px-8 py-3 rounded-lg font-medium transition-colors"
-                    style={{backgroundColor: '#0f5bff'}}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0d4ed8'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0f5bff'}
-                    onClick={() => {
-                      // TODO: Implement flashcard creation
-                      console.log('Create flashcards clicked')
-                    }}
-                  >
-                    Create
-                  </button>
+                <div>
+                  {loading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                      <span className="ml-2 text-gray-600">Loading flashcards...</span>
+                    </div>
+                  ) : flashcards.length === 0 ? (
+                    <div className="text-center">
+                      {/* Flashcards Empty State */}
+                      <div className="w-24 h-24 mx-auto mb-6 flex items-center justify-center">
+                        <svg className="w-16 h-16" style={{color: '#EF4444'}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                        </svg>
+                      </div>
+                      <p className="text-gray-600 mb-6 text-lg leading-relaxed">
+                        Create flashcards to memorize key concepts and terms from your study materials.
+                      </p>
+                      <button
+                        onClick={handleCreateFlashcards}
+                        className="text-white px-8 py-3 rounded-lg font-medium transition-colors"
+                        style={{backgroundColor: '#0f5bff'}}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0d4ed8'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0f5bff'}
+                      >
+                        Create
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      {/* Flashcards List */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {flashcards.map((flashcard) => (
+                          <div
+                            key={flashcard.id}
+                            className="bg-white border border-slate-200 rounded-lg p-4 hover:brightness-95 hover:shadow-sm transition-all max-w-md"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                {/* Flashcard Name */}
+                                <h3 className="font-medium text-slate-800 mb-2">
+                                  {flashcard.custom_name || flashcard.filename || 'Generated Flashcards'}
+                                </h3>
+                                
+                                {/* Source */}
+                                <div className="text-sm text-slate-600 mb-2">
+                                  Source: {flashcard.filename || 'Unknown file'}
+                                </div>
+                                
+                                {/* Cards Count */}
+                                <div className="text-sm text-slate-600 mb-2">
+                                  Cards: {flashcard.cards?.length || 0}
+                                </div>
+                                
+                                {/* Date */}
+                                <div className="text-sm text-slate-500">
+                                  {new Date(flashcard.created_at).toLocaleDateString('en-US', {
+                                    month: '2-digit',
+                                    day: '2-digit',
+                                    year: 'numeric'
+                                  })}
+                                </div>
+                              </div>
+                              
+                              {/* Action Buttons */}
+                              <div className="ml-4 flex-shrink-0 flex items-center gap-2">
+                                <button
+                                  onClick={() => handleOpenFlashcards(flashcard)}
+                                  className="px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 border-2"
+                                  style={{
+                                    borderColor: '#EF4444',
+                                    backgroundColor: '#F3F3F3',
+                                    color: '#EF4444'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.backgroundColor = '#EF4444'
+                                    e.currentTarget.style.color = '#FFFFFF'
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.backgroundColor = '#F3F3F3'
+                                    e.currentTarget.style.color = '#EF4444'
+                                  }}
+                                >
+                                  Open
+                                </button>
+                                <KebabMenu
+                                  onDelete={() => handleDeleteFlashcard(flashcard)}
+                                  itemName="flashcard"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      {/* Create New Button */}
+                      <div className="mt-6 text-center">
+                        <button
+                          onClick={handleCreateFlashcards}
+                          className="text-white px-6 py-2 rounded-lg font-medium transition-colors"
+                          style={{backgroundColor: '#0f5bff'}}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0d4ed8'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0f5bff'}
+                        >
+                          Create New Flashcards
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           </div>
+
+          {/* Delete Confirmation Modal */}
+          {deleteConfirm.type && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 max-w-md mx-4 shadow-xl">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                  Delete {deleteConfirm.type === 'note' ? 'Note' : deleteConfirm.type === 'quiz' ? 'Quiz' : 'Flashcard'}?
+                </h3>
+                <p className="text-gray-600 mb-6">
+                  Are you sure you want to delete <span className="font-medium">{deleteConfirm.name}</span>? 
+                  This action cannot be undone.
+                </p>
+                <div className="flex gap-3 justify-end">
+                  <button
+                    onClick={cancelDelete}
+                    disabled={deleting}
+                    className="px-4 py-2 rounded-lg font-medium transition-colors border-2 border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmDelete}
+                    disabled={deleting}
+                    className="px-4 py-2 rounded-lg font-medium transition-colors text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{backgroundColor: '#EF4444'}}
+                    onMouseEnter={(e) => {
+                      if (!deleting) {
+                        e.currentTarget.style.backgroundColor = '#DC2626'
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!deleting) {
+                        e.currentTarget.style.backgroundColor = '#EF4444'
+                      }
+                    }}
+                  >
+                    {deleting ? 'Deleting...' : 'Delete'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
     </DashboardLayout>
   )
 }
