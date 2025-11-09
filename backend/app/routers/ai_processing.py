@@ -2134,6 +2134,67 @@ async def generate_flashcards(
                 detail=f"Flashcard generation failed: {error_msg}"
             )
 
+@router.put("/flashcards/{flashcard_id}")
+async def update_flashcard(
+    flashcard_id: str,
+    flashcard_update: dict,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Update an existing flashcard set with new cards.
+    """
+    try:
+        # Verify ownership first
+        await verify_resource_ownership(flashcard_id, "flashcards", current_user.id)
+        
+        # Update the flashcard in the database
+        async with httpx.AsyncClient() as client:
+            response = await client.patch(
+                f"{settings.SUPABASE_URL}/rest/v1/flashcards",
+                headers={
+                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                    "apikey": settings.SUPABASE_SERVICE_KEY,
+                    "Content-Type": "application/json",
+                    "Prefer": "return=representation"
+                },
+                params={
+                    "id": f"eq.{flashcard_id}",
+                    "user_id": f"eq.{current_user.id}"
+                },
+                json={
+                    "cards": flashcard_update.get("cards", [])
+                }
+            )
+            
+            if response.status_code == 200:
+                updated_flashcard = response.json()
+                if updated_flashcard:
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "message": "Flashcard updated successfully",
+                            "flashcard": updated_flashcard[0]
+                        }
+                    )
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="Flashcard not found"
+                    )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to update flashcard"
+                )
+                
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating flashcard: {str(e)}"
+        )
+
 @router.delete("/flashcards/{file_id}")
 async def delete_file_flashcards(
     file_id: str,

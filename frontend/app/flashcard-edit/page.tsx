@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import DashboardLayout from '../../components/DashboardLayout'
+import { flashcardService } from '../../lib/flashcardService'
 
 interface Flashcard {
   front: string
@@ -85,16 +86,17 @@ export default function FlashcardEditPage() {
     if (!flashcardsData) return
 
     setIsSaving(true)
+    setError(null)
     try {
-      // TODO: Implement flashcard update endpoint in backend
-      // For now, we'll just update local state and sessionStorage
+      // Save changes to the database
+      await flashcardService.updateFlashcard(flashcardsData.flashcardId, editedCards)
       setIsEditing(false)
       
       // Update the flashcard data with edited cards
-      setFlashcardsData(prev => prev ? { ...prev, cards: editedCards } : null)
+      setFlashcardsData(prev => prev ? { ...prev, cards: editedCards, cardCount: editedCards.length } : null)
       
       // Update sessionStorage with edited cards
-      const updatedFlashcardsData = { ...flashcardsData, cards: editedCards }
+      const updatedFlashcardsData = { ...flashcardsData, cards: editedCards, cardCount: editedCards.length }
       sessionStorage.setItem('generatedFlashcards', JSON.stringify(updatedFlashcardsData))
     } catch (error) {
       console.error('Error saving flashcards:', error)
@@ -125,9 +127,8 @@ export default function FlashcardEditPage() {
     }
     sessionStorage.setItem('flashcardStudyModeData', JSON.stringify(studyModeData))
     
-    // TODO: Navigate to flashcard study mode when implemented
-    // router.push('/flashcard-study')
-    alert('Study mode will be implemented soon!')
+    // Navigate to flashcard study mode
+    router.push('/flashcard-study')
   }
 
   if (loading) {
