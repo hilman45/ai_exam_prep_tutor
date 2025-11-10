@@ -2,9 +2,11 @@ import uuid
 import os
 import json
 import re
+from datetime import datetime, timedelta, date
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 import httpx
 from app.deps import get_current_user, User
 from app.config import settings
@@ -1804,6 +1806,163 @@ async def delete_file_quiz(
             detail=f"Delete failed: {str(e)}"
         )
 
+# Quiz Analytics Models
+class QuizInteractionRequest(BaseModel):
+    question_id: int
+    is_correct: bool
+    time_taken: float
+
+class QuizAnalyticsResponse(BaseModel):
+    total_attempted: int
+    total_correct: int
+    accuracy_percentage: float
+    average_time_per_question: float
+
+@router.post("/quiz/{quiz_id}/interaction")
+async def record_quiz_interaction(
+    quiz_id: str,
+    interaction: QuizInteractionRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Record a quiz interaction when a user answers a question.
+    
+    Args:
+        quiz_id: The ID of the quiz
+        interaction: The interaction data (question_id, is_correct, time_taken)
+        current_user: Authenticated user
+    
+    Returns:
+        Success message with interaction ID
+    """
+    try:
+        # Verify quiz ownership
+        await verify_resource_ownership(quiz_id, "quizzes", current_user.id)
+        
+        # Record interaction in database
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{settings.SUPABASE_URL}/rest/v1/quiz_interactions",
+                headers={
+                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                    "apikey": settings.SUPABASE_SERVICE_KEY,
+                    "Content-Type": "application/json",
+                    "Prefer": "return=representation"
+                },
+                json={
+                    "user_id": current_user.id,
+                    "quiz_id": quiz_id,
+                    "question_id": interaction.question_id,
+                    "is_correct": interaction.is_correct,
+                    "time_taken": interaction.time_taken
+                }
+            )
+            
+            if response.status_code in [200, 201]:
+                interaction_data = response.json()
+                return JSONResponse(
+                    status_code=status.HTTP_201_CREATED,
+                    content={
+                        "message": "Interaction recorded successfully",
+                        "interaction_id": interaction_data[0]["id"] if isinstance(interaction_data, list) else interaction_data.get("id")
+                    }
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to record interaction: {response.status_code} - {response.text}"
+                )
+                
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error recording interaction: {str(e)}"
+        )
+
+@router.get("/quiz/{quiz_id}/analytics")
+async def get_quiz_analytics(
+    quiz_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get analytics for a specific quiz.
+    
+    Args:
+        quiz_id: The ID of the quiz
+        current_user: Authenticated user
+    
+    Returns:
+        Analytics data: total_attempted, total_correct, accuracy_percentage, average_time_per_question
+    """
+    try:
+        # Verify quiz ownership
+        await verify_resource_ownership(quiz_id, "quizzes", current_user.id)
+        
+        # Fetch all interactions for this quiz and user
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{settings.SUPABASE_URL}/rest/v1/quiz_interactions",
+                headers={
+                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                    "apikey": settings.SUPABASE_SERVICE_KEY,
+                    "Content-Type": "application/json"
+                },
+                params={
+                    "quiz_id": f"eq.{quiz_id}",
+                    "user_id": f"eq.{current_user.id}",
+                    "select": "is_correct,time_taken"
+                }
+            )
+            
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to fetch interactions: {response.status_code} - {response.text}"
+                )
+            
+            interactions = response.json()
+            
+            # Calculate analytics
+            total_attempted = len(interactions)
+            total_correct = sum(1 for interaction in interactions if interaction.get("is_correct", False))
+            
+            if total_attempted == 0:
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content={
+                        "total_attempted": 0,
+                        "total_correct": 0,
+                        "accuracy_percentage": 0.0,
+                        "average_time_per_question": 0.0
+                    }
+                )
+            
+            accuracy_percentage = (total_correct / total_attempted) * 100
+            
+            # Calculate average time
+            times = [float(interaction.get("time_taken", 0)) for interaction in interactions]
+            average_time_per_question = sum(times) / len(times) if times else 0.0
+            
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content={
+                    "total_attempted": total_attempted,
+                    "total_correct": total_correct,
+                    "accuracy_percentage": round(accuracy_percentage, 2),
+                    "average_time_per_question": round(average_time_per_question, 2)
+                }
+            )
+                
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching analytics: {str(e)}"
+        )
+
 @router.delete("/summarize/{file_id}")
 async def delete_file_summary(
     file_id: str,
@@ -2230,6 +2389,473 @@ async def delete_file_flashcards(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Delete failed: {str(e)}"
+        )
+
+# Flashcard Analytics Models
+class FlashcardReviewRequest(BaseModel):
+    flashcard_id: int  # Index of the card in the cards JSONB array
+    rating: str  # 'again', 'good', or 'easy'
+    time_taken: float  # Time in seconds
+
+class FlashcardCardStateResponse(BaseModel):
+    flashcard_id: int
+    interval: int
+    due_time: str
+    correct_streak: int
+    easy_count: int
+    is_finished: bool
+
+class FlashcardDailyAnalyticsResponse(BaseModel):
+    date: str
+    total_reviewed: int
+    again_count: int
+    good_count: int
+    easy_count: int
+    total_finished: int
+    total_time_spent: float
+
+# Helper function to get or initialize card state
+async def get_or_init_card_state(
+    user_id: str,
+    flashcard_set_id: str,
+    flashcard_id: int,
+    client: httpx.AsyncClient
+) -> Optional[Dict[str, Any]]:
+    """Get existing card state or return None if it doesn't exist."""
+    try:
+        response = await client.get(
+            f"{settings.SUPABASE_URL}/rest/v1/flashcard_card_states",
+            headers={
+                "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                "apikey": settings.SUPABASE_SERVICE_KEY,
+                "Content-Type": "application/json"
+            },
+            params={
+                "user_id": f"eq.{user_id}",
+                "flashcard_set_id": f"eq.{flashcard_set_id}",
+                "flashcard_id": f"eq.{flashcard_id}",
+                "select": "*",
+                "limit": "1"
+            }
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data and len(data) > 0:
+                return data[0]
+        return None
+    except Exception as e:
+        print(f"Error fetching card state: {e}")
+        return None
+
+# Helper function to update card state based on rating
+async def update_card_state(
+    user_id: str,
+    flashcard_set_id: str,
+    flashcard_id: int,
+    rating: str,
+    client: httpx.AsyncClient
+) -> Dict[str, Any]:
+    """Update card state based on rating (Anki-like logic)."""
+    
+    # Get current state or initialize defaults
+    current_state = await get_or_init_card_state(user_id, flashcard_set_id, flashcard_id, client)
+    
+    now = datetime.utcnow()
+    
+    # Determine new interval based on rating
+    if rating == "again":
+        new_interval = 1  # 1 minute
+        new_streak = 0
+        new_easy_count = current_state.get("easy_count", 0) if current_state else 0
+    elif rating == "good":
+        new_interval = 3  # 3 minutes
+        new_streak = (current_state.get("correct_streak", 0) if current_state else 0) + 1
+        new_easy_count = current_state.get("easy_count", 0) if current_state else 0
+    else:  # easy
+        new_interval = 10  # 10 minutes
+        new_streak = (current_state.get("correct_streak", 0) if current_state else 0) + 1
+        new_easy_count = (current_state.get("easy_count", 0) if current_state else 0) + 1
+    
+    # Calculate new due time
+    new_due_time = now + timedelta(minutes=new_interval)
+    
+    # Check if card is finished (easy_count >= 3 OR correct_streak >= 2)
+    is_finished = new_easy_count >= 3 or new_streak >= 2
+    
+    state_data = {
+        "user_id": user_id,
+        "flashcard_set_id": flashcard_set_id,
+        "flashcard_id": flashcard_id,
+        "interval": new_interval,
+        "due_time": new_due_time.isoformat(),
+        "correct_streak": new_streak,
+        "easy_count": new_easy_count,
+        "is_finished": is_finished,
+        "updated_at": now.isoformat()
+    }
+    
+    # Upsert the state
+    if current_state:
+        # Update existing state
+        response = await client.patch(
+            f"{settings.SUPABASE_URL}/rest/v1/flashcard_card_states",
+            headers={
+                "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                "apikey": settings.SUPABASE_SERVICE_KEY,
+                "Content-Type": "application/json",
+                "Prefer": "return=representation"
+            },
+            params={
+                "id": f"eq.{current_state['id']}"
+            },
+            json=state_data
+        )
+    else:
+        # Insert new state
+        state_data["id"] = str(uuid.uuid4())
+        response = await client.post(
+            f"{settings.SUPABASE_URL}/rest/v1/flashcard_card_states",
+            headers={
+                "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                "apikey": settings.SUPABASE_SERVICE_KEY,
+                "Content-Type": "application/json",
+                "Prefer": "return=representation"
+            },
+            json=state_data
+        )
+    
+    if response.status_code not in [200, 201]:
+        raise Exception(f"Failed to update card state: {response.status_code} - {response.text}")
+    
+    result = response.json()
+    return result[0] if isinstance(result, list) else result
+
+# Helper function to get or initialize daily analytics
+async def get_or_init_daily_analytics(
+    user_id: str,
+    client: httpx.AsyncClient
+) -> Dict[str, Any]:
+    """Get today's analytics or create a new one if it doesn't exist."""
+    
+    today = date.today().isoformat()
+    
+    try:
+        response = await client.get(
+            f"{settings.SUPABASE_URL}/rest/v1/flashcard_daily_analytics",
+            headers={
+                "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                "apikey": settings.SUPABASE_SERVICE_KEY,
+                "Content-Type": "application/json"
+            },
+            params={
+                "user_id": f"eq.{user_id}",
+                "date": f"eq.{today}",
+                "select": "*",
+                "limit": "1"
+            }
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data and len(data) > 0:
+                return data[0]
+        
+        # Create new daily analytics record
+        analytics_data = {
+            "id": str(uuid.uuid4()),
+            "user_id": user_id,
+            "date": today,
+            "total_reviewed": 0,
+            "again_count": 0,
+            "good_count": 0,
+            "easy_count": 0,
+            "total_finished": 0,
+            "total_time_spent": 0.0
+        }
+        
+        create_response = await client.post(
+            f"{settings.SUPABASE_URL}/rest/v1/flashcard_daily_analytics",
+            headers={
+                "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                "apikey": settings.SUPABASE_SERVICE_KEY,
+                "Content-Type": "application/json",
+                "Prefer": "return=representation"
+            },
+            json=analytics_data
+        )
+        
+        if create_response.status_code in [200, 201]:
+            result = create_response.json()
+            return result[0] if isinstance(result, list) else result
+        
+        return analytics_data
+        
+    except Exception as e:
+        print(f"Error fetching/creating daily analytics: {e}")
+        # Return default structure if error
+        return {
+            "id": str(uuid.uuid4()),
+            "user_id": user_id,
+            "date": today,
+            "total_reviewed": 0,
+            "again_count": 0,
+            "good_count": 0,
+            "easy_count": 0,
+            "total_finished": 0,
+            "total_time_spent": 0.0
+        }
+
+# Helper function to update daily analytics
+async def update_daily_analytics(
+    user_id: str,
+    rating: str,
+    time_taken: float,
+    card_finished: bool,
+    client: httpx.AsyncClient
+) -> Dict[str, Any]:
+    """Update daily analytics with a new review."""
+    analytics = await get_or_init_daily_analytics(user_id, client)
+    
+    # Update counts
+    new_total_reviewed = analytics.get("total_reviewed", 0) + 1
+    new_again_count = analytics.get("again_count", 0) + (1 if rating == "again" else 0)
+    new_good_count = analytics.get("good_count", 0) + (1 if rating == "good" else 0)
+    new_easy_count = analytics.get("easy_count", 0) + (1 if rating == "easy" else 0)
+    new_total_finished = analytics.get("total_finished", 0) + (1 if card_finished else 0)
+    new_total_time_spent = analytics.get("total_time_spent", 0.0) + time_taken
+    
+    update_data = {
+        "total_reviewed": new_total_reviewed,
+        "again_count": new_again_count,
+        "good_count": new_good_count,
+        "easy_count": new_easy_count,
+        "total_finished": new_total_finished,
+        "total_time_spent": new_total_time_spent,
+        "updated_at": datetime.utcnow().isoformat()
+    }
+    
+    response = await client.patch(
+        f"{settings.SUPABASE_URL}/rest/v1/flashcard_daily_analytics",
+        headers={
+            "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+            "apikey": settings.SUPABASE_SERVICE_KEY,
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
+        },
+        params={
+            "id": f"eq.{analytics['id']}"
+        },
+        json=update_data
+    )
+    
+    if response.status_code != 200:
+        raise Exception(f"Failed to update daily analytics: {response.status_code} - {response.text}")
+    
+    result = response.json()
+    return result[0] if isinstance(result, list) else result
+
+@router.post("/flashcards/{flashcard_set_id}/review")
+async def record_flashcard_review(
+    flashcard_set_id: str,
+    review: FlashcardReviewRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Record a flashcard review interaction.
+    
+    This endpoint:
+    - Records the review in flashcard_reviews table
+    - Updates the card state (Anki-like logic) based on rating
+    - Updates daily analytics
+    
+    Args:
+        flashcard_set_id: The ID of the flashcard set
+        review: Review data (flashcard_id, rating, time_taken)
+        current_user: Authenticated user
+    
+    Returns:
+        Success message with review ID and updated card state
+    """
+    try:
+        # Validate rating
+        if review.rating not in ["again", "good", "easy"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Rating must be 'again', 'good', or 'easy'"
+            )
+        
+        # Verify flashcard set ownership
+        await verify_resource_ownership(flashcard_set_id, "flashcards", current_user.id)
+        
+        async with httpx.AsyncClient() as client:
+            # Record the review
+            review_data = {
+                "user_id": current_user.id,
+                "flashcard_set_id": flashcard_set_id,
+                "flashcard_id": review.flashcard_id,
+                "rating": review.rating,
+                "time_taken": review.time_taken
+            }
+            
+            review_response = await client.post(
+                f"{settings.SUPABASE_URL}/rest/v1/flashcard_reviews",
+                headers={
+                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                    "apikey": settings.SUPABASE_SERVICE_KEY,
+                    "Content-Type": "application/json",
+                    "Prefer": "return=representation"
+                },
+                json=review_data
+            )
+            
+            if review_response.status_code not in [200, 201]:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to record review: {review_response.status_code} - {review_response.text}"
+                )
+            
+            review_result = review_response.json()
+            review_id = review_result[0]["id"] if isinstance(review_result, list) else review_result.get("id")
+            
+            # Update card state
+            updated_state = await update_card_state(
+                current_user.id,
+                flashcard_set_id,
+                review.flashcard_id,
+                review.rating,
+                client
+            )
+            
+            # Update daily analytics
+            card_finished = updated_state.get("is_finished", False)
+            await update_daily_analytics(
+                current_user.id,
+                review.rating,
+                review.time_taken,
+                card_finished,
+                client
+            )
+            
+            return JSONResponse(
+                status_code=status.HTTP_201_CREATED,
+                content={
+                    "message": "Review recorded successfully",
+                    "review_id": review_id,
+                    "card_state": {
+                        "flashcard_id": review.flashcard_id,
+                        "interval": updated_state["interval"],
+                        "due_time": updated_state["due_time"],
+                        "correct_streak": updated_state["correct_streak"],
+                        "easy_count": updated_state["easy_count"],
+                        "is_finished": updated_state["is_finished"]
+                    }
+                }
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error recording review: {str(e)}"
+        )
+
+@router.get("/flashcards/{flashcard_set_id}/card-states")
+async def get_flashcard_card_states(
+    flashcard_set_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get all card states for a flashcard set.
+    
+    Args:
+        flashcard_set_id: The ID of the flashcard set
+        current_user: Authenticated user
+    
+    Returns:
+        Array of card states for all cards in the set
+    """
+    try:
+        # Verify flashcard set ownership
+        await verify_resource_ownership(flashcard_set_id, "flashcards", current_user.id)
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{settings.SUPABASE_URL}/rest/v1/flashcard_card_states",
+                headers={
+                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                    "apikey": settings.SUPABASE_SERVICE_KEY,
+                    "Content-Type": "application/json"
+                },
+                params={
+                    "user_id": f"eq.{current_user.id}",
+                    "flashcard_set_id": f"eq.{flashcard_set_id}",
+                    "select": "flashcard_id,interval,due_time,correct_streak,easy_count,is_finished",
+                    "order": "flashcard_id.asc"
+                }
+            )
+            
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to fetch card states: {response.status_code} - {response.text}"
+                )
+            
+            card_states = response.json()
+            
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content={
+                    "flashcard_set_id": flashcard_set_id,
+                    "card_states": card_states
+                }
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching card states: {str(e)}"
+        )
+
+@router.get("/flashcards/analytics/daily")
+async def get_flashcard_daily_analytics(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get today's flashcard study analytics for the current user.
+    
+    Daily analytics automatically reset at midnight (new record created for new day).
+    
+    Args:
+        current_user: Authenticated user
+    
+    Returns:
+        Daily analytics: total_reviewed, again_count, good_count, easy_count, total_finished, total_time_spent
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            analytics = await get_or_init_daily_analytics(current_user.id, client)
+            
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content={
+                    "date": analytics.get("date"),
+                    "total_reviewed": analytics.get("total_reviewed", 0),
+                    "again_count": analytics.get("again_count", 0),
+                    "good_count": analytics.get("good_count", 0),
+                    "easy_count": analytics.get("easy_count", 0),
+                    "total_finished": analytics.get("total_finished", 0),
+                    "total_time_spent": round(float(analytics.get("total_time_spent", 0.0)), 2)
+                }
+            )
+            
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching daily analytics: {str(e)}"
         )
 
 @router.get("/summaries/folder/{folder_id}")

@@ -29,6 +29,31 @@ export interface GenerateFlashcardResponse {
   created_at?: string
 }
 
+export interface FlashcardReviewRequest {
+  flashcard_id: number
+  rating: 'again' | 'good' | 'easy'
+  time_taken: number
+}
+
+export interface FlashcardCardState {
+  flashcard_id: number
+  interval: number
+  due_time: string
+  correct_streak: number
+  easy_count: number
+  is_finished: boolean
+}
+
+export interface FlashcardDailyAnalytics {
+  date: string
+  total_reviewed: number
+  again_count: number
+  good_count: number
+  easy_count: number
+  total_finished: number
+  total_time_spent: number
+}
+
 class FlashcardService {
   private async getAuthHeaders(): Promise<HeadersInit> {
     // Get the current session from Supabase
@@ -134,6 +159,65 @@ class FlashcardService {
       }
     } catch (error) {
       console.error('Error deleting flashcard:', error)
+      throw error
+    }
+  }
+
+  // Flashcard Analytics Methods
+  async recordReview(flashcardSetId: string, review: FlashcardReviewRequest): Promise<void> {
+    try {
+      const headers = await this.getAuthHeaders()
+      const response = await fetch(`${API_BASE_URL}/ai/flashcards/${flashcardSetId}/review`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(review),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.detail || `Failed to record review: ${response.statusText}`)
+      }
+    } catch (error) {
+      console.error('Error recording flashcard review:', error)
+      throw error
+    }
+  }
+
+  async getCardStates(flashcardSetId: string): Promise<FlashcardCardState[]> {
+    try {
+      const headers = await this.getAuthHeaders()
+      const response = await fetch(`${API_BASE_URL}/ai/flashcards/${flashcardSetId}/card-states`, {
+        method: 'GET',
+        headers,
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch card states: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      return data.card_states || []
+    } catch (error) {
+      console.error('Error fetching card states:', error)
+      throw error
+    }
+  }
+
+  async getDailyAnalytics(): Promise<FlashcardDailyAnalytics> {
+    try {
+      const headers = await this.getAuthHeaders()
+      const response = await fetch(`${API_BASE_URL}/ai/flashcards/analytics/daily`, {
+        method: 'GET',
+        headers,
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch daily analytics: ${response.statusText}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('Error fetching daily analytics:', error)
       throw error
     }
   }
