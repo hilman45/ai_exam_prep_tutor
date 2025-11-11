@@ -54,6 +54,16 @@ export interface FlashcardDailyAnalytics {
   total_time_spent: number
 }
 
+export interface FlashcardSetWithAnalytics {
+  id: string
+  display_name: string
+  filename?: string
+  custom_name?: string
+  again_rate: number
+  total_reviewed: number
+  again_count: number
+}
+
 class FlashcardService {
   private async getAuthHeaders(): Promise<HeadersInit> {
     // Get the current session from Supabase
@@ -218,6 +228,96 @@ class FlashcardService {
       return await response.json()
     } catch (error) {
       console.error('Error fetching daily analytics:', error)
+      throw error
+    }
+  }
+
+  async getAllFlashcardSetsWithAnalytics(): Promise<FlashcardSetWithAnalytics[]> {
+    try {
+      // Get current user
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.user) {
+        throw new Error('User not authenticated')
+      }
+
+      // Get all flashcard sets for the user (across all folders)
+      const { data: flashcardSets, error: flashcardsError } = await supabase
+        .from('flashcards')
+        .select('id, file_id, custom_name, folder_id')
+        .eq('user_id', session.user.id)
+
+      if (flashcardsError) {
+        throw new Error(`Failed to fetch flashcards: ${flashcardsError.message}`)
+      }
+
+      if (!flashcardSets || flashcardSets.length === 0) {
+        return []
+      }
+
+      // Get filenames for flashcard sets
+      const fileIds = Array.from(new Set(flashcardSets.map(f => f.file_id)))
+      const { data: files, error: filesError } = await supabase
+        .from('files')
+        .select('id, filename')
+        .in('id', fileIds)
+        .eq('user_id', session.user.id)
+
+      const fileMap = new Map<string, string>()
+      if (files) {
+        files.forEach(f => fileMap.set(f.id, f.filename))
+      }
+
+      // Get card states for each flashcard set to calculate again rate
+      const flashcardSetsWithAnalytics: FlashcardSetWithAnalytics[] = []
+      
+      for (const flashcardSet of flashcardSets) {
+        try {
+          const cardStates = await this.getCardStates(flashcardSet.id)
+          
+          // Calculate again rate from card states
+          // We'll query flashcard_reviews to get the actual again count
+          const { data: reviews, error: reviewsError } = await supabase
+            .from('flashcard_reviews')
+            .select('rating')
+            .eq('flashcard_set_id', flashcardSet.id)
+            .eq('user_id', session.user.id)
+
+          if (reviewsError) {
+            console.warn(`Failed to get reviews for flashcard ${flashcardSet.id}:`, reviewsError)
+            continue
+          }
+
+          if (!reviews || reviews.length === 0) {
+            continue // Skip flashcard sets with no reviews
+          }
+
+          const againCount = reviews.filter(r => r.rating === 'again').length
+          const totalReviewed = reviews.length
+          const againRate = totalReviewed > 0 ? (againCount / totalReviewed) * 100 : 0
+
+          const displayName = flashcardSet.custom_name || fileMap.get(flashcardSet.file_id) || 'Untitled Flashcard Set'
+          
+          flashcardSetsWithAnalytics.push({
+            id: flashcardSet.id,
+            display_name: displayName,
+            filename: fileMap.get(flashcardSet.file_id),
+            custom_name: flashcardSet.custom_name,
+            again_rate: againRate,
+            total_reviewed: totalReviewed,
+            again_count: againCount,
+          })
+        } catch (error) {
+          // If analytics fetch fails, skip this flashcard set
+          console.warn(`Failed to get analytics for flashcard ${flashcardSet.id}:`, error)
+        }
+      }
+
+      // Sort by again rate (highest first)
+      return flashcardSetsWithAnalytics
+        .filter(f => f.total_reviewed > 0)
+        .sort((a, b) => b.again_rate - a.again_rate)
+    } catch (error) {
+      console.error('Error fetching all flashcard sets with analytics:', error)
       throw error
     }
   }
