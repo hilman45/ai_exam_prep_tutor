@@ -114,6 +114,23 @@ class NotesService {
     }
   }
 
+  async deleteSummary(summaryId: string): Promise<void> {
+    try {
+      const headers = await this.getAuthHeaders()
+      const response = await fetch(`${API_BASE_URL}/delete/summary/${summaryId}`, {
+        method: 'DELETE',
+        headers,
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to delete summary: ${response.statusText}`)
+      }
+    } catch (error) {
+      console.error('Error deleting summary:', error)
+      throw error
+    }
+  }
+
 }
 
 export const notesService = new NotesService()

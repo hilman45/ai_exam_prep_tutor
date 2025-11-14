@@ -123,6 +123,26 @@ export default function FolderPage() {
   }
 
   const handleOpenQuiz = (quiz: Quiz) => {
+    // Store quiz data in sessionStorage for quiz mode
+    const quizModeData = {
+      fileId: quiz.file_id,
+      quizId: quiz.id,
+      quizName: quiz.custom_name || quiz.display_name || 'Generated Quiz',
+      folderName: folderName,
+      questions: quiz.questions,
+      questionCount: quiz.questions?.length || 0,
+      filename: quiz.filename || 'Unknown File',
+      cached: false,
+      createdAt: quiz.created_at
+    }
+    
+    sessionStorage.setItem('quizModeData', JSON.stringify(quizModeData))
+    
+    // Navigate to quiz mode
+    router.push('/quiz-mode')
+  }
+
+  const handleEditQuiz = (quiz: Quiz) => {
     // Store quiz data in sessionStorage for the quiz edit page
     const quizData = {
       fileId: quiz.file_id,
@@ -143,6 +163,26 @@ export default function FolderPage() {
   }
 
   const handleOpenFlashcards = (flashcard: FlashcardSet) => {
+    // Store flashcard data in sessionStorage for flashcard study mode
+    const flashcardStudyModeData = {
+      fileId: flashcard.file_id,
+      flashcardId: flashcard.id,
+      flashcardName: flashcard.custom_name || flashcard.filename || 'Generated Flashcards',
+      folderName: folderName,
+      cards: flashcard.cards,
+      cardCount: flashcard.cards?.length || 0,
+      filename: flashcard.filename || 'Unknown File',
+      cached: false,
+      createdAt: flashcard.created_at
+    }
+    
+    sessionStorage.setItem('flashcardStudyModeData', JSON.stringify(flashcardStudyModeData))
+    
+    // Navigate to flashcard study mode
+    router.push('/flashcard-study')
+  }
+
+  const handleEditFlashcards = (flashcard: FlashcardSet) => {
     // Store flashcard data in sessionStorage for the flashcard edit page
     const flashcardData = {
       fileId: flashcard.file_id,
@@ -497,6 +537,7 @@ export default function FolderPage() {
                                 </button>
                                 <KebabMenu
                                   onDelete={() => handleDeleteQuiz(quiz)}
+                                  onEdit={() => handleEditQuiz(quiz)}
                                   itemName="quiz"
                                 />
                               </div>
@@ -609,6 +650,7 @@ export default function FolderPage() {
                                 </button>
                                 <KebabMenu
                                   onDelete={() => handleDeleteFlashcard(flashcard)}
+                                  onEdit={() => handleEditFlashcards(flashcard)}
                                   itemName="flashcard"
                                 />
                               </div>

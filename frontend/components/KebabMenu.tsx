@@ -5,9 +5,10 @@ import { useState, useRef, useEffect } from 'react'
 interface KebabMenuProps {
   onDelete: () => void
   itemName?: string
+  onEdit?: () => void
 }
 
-export default function KebabMenu({ onDelete, itemName = 'item' }: KebabMenuProps) {
+export default function KebabMenu({ onDelete, itemName = 'item', onEdit }: KebabMenuProps) {
   const [isOpen, setIsOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -30,6 +31,13 @@ export default function KebabMenu({ onDelete, itemName = 'item' }: KebabMenuProp
   const handleDeleteClick = () => {
     setIsOpen(false)
     onDelete()
+  }
+
+  const handleEditClick = () => {
+    setIsOpen(false)
+    if (onEdit) {
+      onEdit()
+    }
   }
 
   return (
@@ -61,6 +69,14 @@ export default function KebabMenu({ onDelete, itemName = 'item' }: KebabMenuProp
       {/* Dropdown Menu */}
       {isOpen && (
         <div className="absolute right-0 mt-2 w-40 bg-white rounded-lg shadow-lg border border-gray-200 z-50 py-1">
+          {onEdit && (
+            <button
+              onClick={handleEditClick}
+              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors rounded-lg mx-1"
+            >
+              Edit
+            </button>
+          )}
           <button
             onClick={handleDeleteClick}
             className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors rounded-lg mx-1"
