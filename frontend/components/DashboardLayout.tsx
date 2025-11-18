@@ -19,10 +19,34 @@ export default function DashboardLayout({
 }: DashboardLayoutProps) {
   const [user, setUser] = useState<any>(null)
   const [username, setUsername] = useState<string>('')
+  const [profilePicture, setProfilePicture] = useState<string | null>(null)
+  const [fullName, setFullName] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false)
   const router = useRouter()
+
+  const loadProfileData = async (userId: string) => {
+    try {
+      const { data: profile, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('username, full_name, profile_picture_url')
+        .eq('user_id', userId)
+        .single()
+      
+      if (profileError) {
+        console.error('Error fetching profile:', profileError)
+        setUsername('User') // Fallback
+      } else {
+        setUsername(profile.username)
+        setFullName(profile.full_name)
+        setProfilePicture(profile.profile_picture_url)
+      }
+    } catch (profileError) {
+      console.error('Error fetching profile:', profileError)
+      setUsername('User') // Fallback
+    }
+  }
 
   useEffect(() => {
     // Check if user is authenticated and fetch username
@@ -37,26 +61,7 @@ export default function DashboardLayout({
         }
 
         setUser(user)
-        
-        // Fetch username from user_profiles table
-        try {
-          const { data: profile, error: profileError } = await supabase
-            .from('user_profiles')
-            .select('username')
-            .eq('user_id', user.id)
-            .single()
-          
-          if (profileError) {
-            console.error('Error fetching username:', profileError)
-            setUsername('User') // Fallback
-          } else {
-            setUsername(profile.username)
-          }
-        } catch (profileError) {
-          console.error('Error fetching username:', profileError)
-          setUsername('User') // Fallback
-        }
-        
+        await loadProfileData(user.id)
         setLoading(false)
       } catch (error) {
         console.error('Error checking user:', error)
@@ -73,26 +78,7 @@ export default function DashboardLayout({
           router.push('/login')
         } else if (event === 'SIGNED_IN' && session) {
           setUser(session.user)
-          
-          // Fetch username for new session
-          try {
-            const { data: profile, error: profileError } = await supabase
-              .from('user_profiles')
-              .select('username')
-              .eq('user_id', session.user.id)
-              .single()
-            
-            if (profileError) {
-              console.error('Error fetching username:', profileError)
-              setUsername('User') // Fallback
-            } else {
-              setUsername(profile.username)
-            }
-          } catch (profileError) {
-            console.error('Error fetching username:', profileError)
-            setUsername('User') // Fallback
-          }
-          
+          await loadProfileData(session.user.id)
           setLoading(false)
         }
       }
@@ -102,6 +88,18 @@ export default function DashboardLayout({
       subscription.unsubscribe()
     }
   }, [router])
+
+  // Refresh profile data when component becomes visible (e.g., after returning from profile page)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && user) {
+        loadProfileData(user.id)
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [user])
 
   const handleSignOut = async () => {
     try {
@@ -153,6 +151,17 @@ export default function DashboardLayout({
     return colors[tab as keyof typeof colors] || '#7C3AED'
   }
 
+  const getInitials = (name: string | null, email: string) => {
+    if (name) {
+      const parts = name.trim().split(' ')
+      if (parts.length >= 2) {
+        return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
+      }
+      return name[0].toUpperCase()
+    }
+    return email[0].toUpperCase()
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center font-space-grotesk">
@@ -178,15 +187,23 @@ export default function DashboardLayout({
               </h1>
             </div>
 
-            {/* Profile Icon with Dropdown */}
+            {/* Profile Picture/Icon with Dropdown */}
             <div className="relative">
               <button 
-                className="profile-button w-8 h-8 rounded-full border-2 border-gray-300 flex items-center justify-center hover:border-primary transition-colors"
+                className="profile-button w-10 h-10 rounded-full border-2 border-gray-300 flex items-center justify-center hover:border-primary transition-colors overflow-hidden"
                 onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
               >
-                <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
+                {profilePicture ? (
+                  <img
+                    src={profilePicture}
+                    alt="Profile"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-primary flex items-center justify-center text-white text-sm font-bold">
+                    {user ? getInitials(fullName, user.email || '') : 'U'}
+                  </div>
+                )}
               </button>
               
               {/* Profile Dropdown */}
@@ -196,7 +213,7 @@ export default function DashboardLayout({
                     className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
                     onClick={() => {
                       setProfileDropdownOpen(false)
-                      // TODO: Navigate to profile page
+                      router.push('/profile')
                     }}
                   >
                     My Profile
@@ -301,7 +318,10 @@ export default function DashboardLayout({
               </div>
 
               {/* Profile */}
-              <div className={getNavItemClasses('profile')}>
+              <div 
+                className={getNavItemClasses('profile')}
+                onClick={() => router.push('/profile')}
+              >
                 <svg className={`${sidebarCollapsed ? 'w-6 h-6' : 'w-5 h-5'} group-hover:text-white`} style={{color: getIconColor('profile')}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
