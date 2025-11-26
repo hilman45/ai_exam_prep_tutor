@@ -3,7 +3,14 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { folderService, Folder } from '../../lib/folderService'
+import { quizService } from '../../lib/quizService'
 import DashboardLayout from '../../components/DashboardLayout'
+
+interface StudyStreak {
+  current_streak: number
+  longest_streak: number
+  last_study_date: string | null
+}
 
 export default function DashboardPage() {
   const [folderMenuOpen, setFolderMenuOpen] = useState<string | null>(null)
@@ -12,11 +19,14 @@ export default function DashboardPage() {
   const [folders, setFolders] = useState<Folder[]>([])
   const [foldersLoading, setFoldersLoading] = useState(true)
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
+  const [studyStreak, setStudyStreak] = useState<StudyStreak | null>(null)
+  const [streakLoading, setStreakLoading] = useState(true)
   const router = useRouter()
 
   useEffect(() => {
-    // Load folders when component mounts
+    // Load folders and streak when component mounts
     loadFolders()
+    loadStudyStreak()
   }, [])
 
   // Close dropdowns when clicking outside
@@ -70,11 +80,55 @@ export default function DashboardPage() {
     setAddFolderModalOpen(false)
   }
 
+  const loadStudyStreak = async () => {
+    try {
+      setStreakLoading(true)
+      const streakData = await quizService.getStudyStreak()
+      setStudyStreak(streakData)
+    } catch (error) {
+      console.error('Error loading study streak:', error)
+      // Set defaults on error
+      setStudyStreak({ current_streak: 0, longest_streak: 0, last_study_date: null })
+    } finally {
+      setStreakLoading(false)
+    }
+  }
+
   return (
     <DashboardLayout activeTab="home">
       <div className="p-6">
-            {/* Dashboard Title */}
-            <h1 className="text-2xl font-bold text-gray-800 mb-8">Dashboard</h1>
+            {/* Dashboard Title with Study Streak */}
+            <div className="flex items-center justify-between mb-8">
+              <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
+              
+              {/* Study Streak Card - Compact */}
+              <div className="bg-gradient-to-r from-orange-50 to-yellow-50 rounded-lg border-2 border-orange-200 px-6 py-2.5 transition-all duration-200 hover:scale-[1.02] hover:shadow-md">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-orange-200 flex items-center justify-center flex-shrink-0">
+                    <svg
+                      className="w-5 h-5 text-orange-700"
+                      fill="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-600 leading-tight">Study Streak</p>
+                    {streakLoading ? (
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <div className="w-3 h-3 border-2 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+                        <span className="text-xs text-gray-500">...</span>
+                      </div>
+                    ) : (
+                      <p className="text-lg font-bold text-gray-900 leading-tight">
+                        {studyStreak?.current_streak || 0} {studyStreak?.current_streak === 1 ? 'day' : 'days'}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
 
             {/* Feature Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">

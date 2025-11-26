@@ -31,11 +31,18 @@ ChartJS.register(
   ArcElement
 )
 
+interface StudyStreak {
+  current_streak: number
+  longest_streak: number
+  last_study_date: string | null
+}
+
 export default function AnalyticsPage() {
   const [quizAnalytics, setQuizAnalytics] = useState<QuizDailyAnalytics | null>(null)
   const [flashcardAnalytics, setFlashcardAnalytics] = useState<FlashcardDailyAnalytics | null>(null)
   const [weakestQuizzes, setWeakestQuizzes] = useState<QuizWithAnalytics[]>([])
   const [weakestFlashcards, setWeakestFlashcards] = useState<FlashcardSetWithAnalytics[]>([])
+  const [studyStreak, setStudyStreak] = useState<StudyStreak | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -48,16 +55,18 @@ export default function AnalyticsPage() {
       setLoading(true)
       setError(null)
 
-      // Fetch daily analytics and weakest items in parallel
-      const [quizData, flashcardData, allQuizzes, allFlashcards] = await Promise.all([
+      // Fetch daily analytics, weakest items, and streak in parallel
+      const [quizData, flashcardData, allQuizzes, allFlashcards, streakData] = await Promise.all([
         quizService.getDailyAnalytics(),
         flashcardService.getDailyAnalytics(),
         quizService.getAllQuizzesWithAnalytics().catch(() => []),
         flashcardService.getAllFlashcardSetsWithAnalytics().catch(() => []),
+        quizService.getStudyStreak().catch(() => ({ current_streak: 0, longest_streak: 0, last_study_date: null })),
       ])
 
       setQuizAnalytics(quizData)
       setFlashcardAnalytics(flashcardData)
+      setStudyStreak(streakData)
       
       // Get top 3 weakest quizzes (lowest accuracy)
       setWeakestQuizzes(allQuizzes.slice(0, 3))
@@ -388,31 +397,50 @@ export default function AnalyticsPage() {
               </div>
             </div>
 
-            {/* Study Streak (Placeholder) */}
+            {/* Current Study Streak */}
             <div className="bg-white rounded-lg border-2 border-gray-200 p-6 transition-all duration-200 hover:scale-105 hover:shadow-lg">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">Study Streak</p>
-                  <p className="text-3xl font-bold text-gray-900">0 days</p>
+                  <p className="text-sm text-gray-600 mb-1">Current Study Streak</p>
+                  <p className="text-3xl font-bold text-gray-900">
+                    {studyStreak?.current_streak || 0} {studyStreak?.current_streak === 1 ? 'day' : 'days'}
+                  </p>
                 </div>
-                <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
+                <div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center">
                   <svg
-                    className="w-6 h-6 text-green-600"
-                    fill="none"
-                    stroke="currentColor"
+                    className="w-6 h-6 text-orange-600"
+                    fill="currentColor"
                     viewBox="0 0 24 24"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
-                    />
+                    <path d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
                   </svg>
                 </div>
               </div>
             </div>
           </div>
+          
+          {/* Longest Streak Display */}
+          {studyStreak && studyStreak.longest_streak > 0 && (
+            <div className="mt-4 bg-gradient-to-r from-orange-50 to-yellow-50 rounded-lg border-2 border-orange-200 p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-orange-200 flex items-center justify-center">
+                  <svg
+                    className="w-5 h-5 text-orange-700"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Longest Streak</p>
+                  <p className="text-xl font-bold text-gray-900">
+                    {studyStreak.longest_streak} {studyStreak.longest_streak === 1 ? 'day' : 'days'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Quiz Analytics Section */}

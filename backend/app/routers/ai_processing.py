@@ -1859,6 +1859,12 @@ async def record_quiz_interaction(
             )
             
             if response.status_code in [200, 201]:
+                # Update study streak (silently fail if error - don't interrupt quiz flow)
+                try:
+                    await update_study_streak(current_user.id, client)
+                except Exception as e:
+                    print(f"Warning: Failed to update study streak: {e}")
+                
                 interaction_data = response.json()
                 return JSONResponse(
                     status_code=status.HTTP_201_CREATED,
@@ -2655,6 +2661,147 @@ async def update_daily_analytics(
     result = response.json()
     return result[0] if isinstance(result, list) else result
 
+# Helper function to update study streak
+async def update_study_streak(
+    user_id: str,
+    client: httpx.AsyncClient
+) -> Dict[str, Any]:
+    """
+    Update study streak when user studies (answers quiz or reviews flashcard).
+    
+    Logic:
+    - If last_study_date = yesterday → streak + 1
+    - If last_study_date = today → streak unchanged (already counted)
+    - If last_study_date is older than yesterday → streak resets to 1
+    
+    Args:
+        user_id: The user ID
+        client: HTTP client for Supabase requests
+    
+    Returns:
+        Updated streak data
+    """
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    
+    try:
+        # Get current user profile
+        profile_response = await client.get(
+            f"{settings.SUPABASE_URL}/rest/v1/user_profiles",
+            headers={
+                "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                "apikey": settings.SUPABASE_SERVICE_KEY,
+                "Content-Type": "application/json"
+            },
+            params={
+                "user_id": f"eq.{user_id}",
+                "select": "current_streak,longest_streak,last_study_date",
+                "limit": "1"
+            }
+        )
+        
+        if profile_response.status_code != 200:
+            # If profile doesn't exist, create it with default values
+            current_streak = 1
+            longest_streak = 1
+            last_study_date = None
+        else:
+            profile_data = profile_response.json()
+            if not profile_data or len(profile_data) == 0:
+                # Profile doesn't exist, use defaults
+                current_streak = 1
+                longest_streak = 1
+                last_study_date = None
+            else:
+                profile = profile_data[0]
+                current_streak = profile.get("current_streak", 0) or 0
+                longest_streak = profile.get("longest_streak", 0) or 0
+                last_study_date_str = profile.get("last_study_date")
+                
+                if last_study_date_str:
+                    try:
+                        last_study_date = date.fromisoformat(last_study_date_str)
+                    except (ValueError, TypeError):
+                        last_study_date = None
+                else:
+                    last_study_date = None
+        
+        # Calculate new streak
+        if last_study_date is None:
+            # First time studying
+            new_streak = 1
+        elif last_study_date == today:
+            # Already studied today, don't change streak
+            new_streak = current_streak
+        elif last_study_date == yesterday:
+            # Studied yesterday, increment streak
+            new_streak = current_streak + 1
+        else:
+            # Gap in study, reset streak to 1
+            new_streak = 1
+        
+        # Update longest streak if current is higher
+        new_longest_streak = max(longest_streak, new_streak)
+        
+        # Update user profile
+        update_data = {
+            "current_streak": new_streak,
+            "longest_streak": new_longest_streak,
+            "last_study_date": today.isoformat(),
+            "updated_at": datetime.utcnow().isoformat()
+        }
+        
+        update_response = await client.patch(
+            f"{settings.SUPABASE_URL}/rest/v1/user_profiles",
+            headers={
+                "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                "apikey": settings.SUPABASE_SERVICE_KEY,
+                "Content-Type": "application/json",
+                "Prefer": "return=representation"
+            },
+            params={
+                "user_id": f"eq.{user_id}"
+            },
+            json=update_data
+        )
+        
+        if update_response.status_code not in [200, 204]:
+            # If update fails, try to create profile
+            create_response = await client.post(
+                f"{settings.SUPABASE_URL}/rest/v1/user_profiles",
+                headers={
+                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                    "apikey": settings.SUPABASE_SERVICE_KEY,
+                    "Content-Type": "application/json",
+                    "Prefer": "return=representation"
+                },
+                json={
+                    "user_id": user_id,
+                    "username": f"user_{user_id[:8]}",  # Temporary username
+                    "current_streak": new_streak,
+                    "longest_streak": new_longest_streak,
+                    "last_study_date": today.isoformat()
+                }
+            )
+            
+            if create_response.status_code not in [200, 201]:
+                print(f"Warning: Failed to create/update user profile for streak: {create_response.status_code} - {create_response.text}")
+        
+        return {
+            "current_streak": new_streak,
+            "longest_streak": new_longest_streak,
+            "last_study_date": today.isoformat()
+        }
+        
+    except Exception as e:
+        print(f"Error updating study streak: {e}")
+        # Return default values on error
+        return {
+            "current_streak": 0,
+            "longest_streak": 0,
+            "last_study_date": None
+        }
+
 @router.post("/flashcards/{flashcard_set_id}/review")
 async def record_flashcard_review(
     flashcard_set_id: str,
@@ -2736,6 +2883,12 @@ async def record_flashcard_review(
                 card_finished,
                 client
             )
+            
+            # Update study streak (silently fail if error - don't interrupt study flow)
+            try:
+                await update_study_streak(current_user.id, client)
+            except Exception as e:
+                print(f"Warning: Failed to update study streak: {e}")
             
             return JSONResponse(
                 status_code=status.HTTP_201_CREATED,
@@ -2856,6 +3009,75 @@ async def get_flashcard_daily_analytics(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error fetching daily analytics: {str(e)}"
+        )
+
+@router.get("/analytics/streak")
+async def get_study_streak_analytics(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get study streak analytics for the current user.
+    
+    Args:
+        current_user: Authenticated user
+    
+    Returns:
+        Streak analytics: current_streak, longest_streak, last_study_date
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            # Get user profile with streak data
+            response = await client.get(
+                f"{settings.SUPABASE_URL}/rest/v1/user_profiles",
+                headers={
+                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                    "apikey": settings.SUPABASE_SERVICE_KEY,
+                    "Content-Type": "application/json"
+                },
+                params={
+                    "user_id": f"eq.{current_user.id}",
+                    "select": "current_streak,longest_streak,last_study_date",
+                    "limit": "1"
+                }
+            )
+            
+            if response.status_code != 200:
+                # Return defaults if profile doesn't exist
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content={
+                        "current_streak": 0,
+                        "longest_streak": 0,
+                        "last_study_date": None
+                    }
+                )
+            
+            profile_data = response.json()
+            if not profile_data or len(profile_data) == 0:
+                # Profile doesn't exist, return defaults
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content={
+                        "current_streak": 0,
+                        "longest_streak": 0,
+                        "last_study_date": None
+                    }
+                )
+            
+            profile = profile_data[0]
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content={
+                    "current_streak": profile.get("current_streak", 0) or 0,
+                    "longest_streak": profile.get("longest_streak", 0) or 0,
+                    "last_study_date": profile.get("last_study_date")
+                }
+            )
+            
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching streak analytics: {str(e)}"
         )
 
 @router.get("/summaries/folder/{folder_id}")

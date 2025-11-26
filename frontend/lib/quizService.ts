@@ -342,6 +342,34 @@ class QuizService {
       throw error
     }
   }
+
+  async getStudyStreak(): Promise<{
+    current_streak: number
+    longest_streak: number
+    last_study_date: string | null
+  }> {
+    try {
+      const headers = await this.getAuthHeaders()
+      const response = await fetch(`${API_BASE_URL}/analytics/streak`, {
+        method: 'GET',
+        headers,
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch study streak: ${response.statusText}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('Error fetching study streak:', error)
+      // Return defaults on error
+      return {
+        current_streak: 0,
+        longest_streak: 0,
+        last_study_date: null,
+      }
+    }
+  }
 }
 
 export const quizService = new QuizService()
