@@ -37,6 +37,7 @@ export default function FlashcardStudyPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isDone, setIsDone] = useState(false) // True when no cards are due
+  const [studyAllCards, setStudyAllCards] = useState(false) // If true, show all cards regardless of due time
   const cardStartTime = useRef<number>(Date.now())
   const router = useRouter()
 
@@ -53,9 +54,10 @@ export default function FlashcardStudyPage() {
       
       // Card is due if:
       // 1. No state exists (never reviewed) OR
-      // 2. due_time <= now AND is_finished = false
-      const isDue = !state || 
-        (new Date(state.due_time) <= now && !state.is_finished)
+      // 2. due_time <= now (card is overdue)
+      // Note: We ignore is_finished flag since cards should always be reviewable
+      // Cards that were marked as finished in the old system will still show if overdue
+      const isDue = !state || new Date(state.due_time) <= now
       
       if (isDue) {
         due.push({
@@ -79,18 +81,38 @@ export default function FlashcardStudyPage() {
   }
 
   // Load card states and filter due cards
-  const loadCardStatesAndFilter = async (flashcardSetId: string, cards: Flashcard[]) => {
+  const loadCardStatesAndFilter = async (flashcardSetId: string, cards: Flashcard[], showAll: boolean = false) => {
     try {
       // Fetch card states
       const states = await flashcardService.getCardStates(flashcardSetId)
       const statesMap = new Map<number, FlashcardCardState>()
       states.forEach(state => {
+        // flashcard_id in card states is the index (0, 1, 2, ...) of the card in the cards array
         statesMap.set(state.flashcard_id, state)
       })
       setCardStates(statesMap)
       
-      // Filter due cards
-      const due = filterDueCards(cards, statesMap)
+      // Filter due cards (or show all if showAll is true)
+      let due: DueCard[]
+      if (showAll) {
+        // Show all cards if user wants to study everything
+        due = cards.map((card, idx) => ({
+          card,
+          originalIndex: idx,
+          shuffledIndex: idx
+        }))
+        // Shuffle all cards
+        for (let i = due.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1))
+          ;[due[i], due[j]] = [due[j], due[i]]
+          due[i].shuffledIndex = i
+          due[j].shuffledIndex = j
+        }
+      } else {
+        due = filterDueCards(cards, statesMap)
+      }
+      
+      console.log(`Filtered ${due.length} ${showAll ? 'total' : 'due'} cards out of ${cards.length} total cards`)
       setDueCards(due)
       
       if (due.length === 0) {
@@ -109,6 +131,7 @@ export default function FlashcardStudyPage() {
         originalIndex: idx,
         shuffledIndex: idx
       }))
+      console.log(`Fallback: showing all ${allDue.length} cards`)
       setDueCards(allDue)
       setIsDone(false)
     }
@@ -128,14 +151,43 @@ export default function FlashcardStudyPage() {
         }
 
         const parsedData = JSON.parse(storedData)
-        setStudyData(parsedData)
         
-        // Store all cards in original order
-        const cards = [...parsedData.cards]
+        // Store all cards in original order - ensure cards is an array
+        let cards = Array.isArray(parsedData.cards) ? [...parsedData.cards] : []
+        
+        // If cards are missing or empty, try to fetch from API
+        if (cards.length === 0 && parsedData.flashcardId) {
+          console.log('Cards missing from sessionStorage, fetching from API...')
+          try {
+            const flashcardSet = await flashcardService.getFlashcard(parsedData.flashcardId)
+            cards = Array.isArray(flashcardSet.cards) ? [...flashcardSet.cards] : []
+            
+            // Update parsedData with fetched data
+            parsedData.cards = cards
+            parsedData.cardCount = cards.length
+            parsedData.filename = flashcardSet.filename || parsedData.filename
+            parsedData.flashcardName = flashcardSet.custom_name || flashcardSet.filename || parsedData.flashcardName
+            
+            // Update sessionStorage with complete data
+            sessionStorage.setItem('flashcardStudyModeData', JSON.stringify(parsedData))
+          } catch (apiError) {
+            console.error('Error fetching flashcard from API:', apiError)
+            setError('No flashcards found in this set. Please check your flashcard data.')
+            return
+          }
+        }
+        
+        if (cards.length === 0) {
+          setError('No flashcards found in this set. Please check your flashcard data.')
+          return
+        }
+        
+        console.log(`Loaded ${cards.length} flashcards for study session`)
+        setStudyData(parsedData)
         setAllCards(cards)
         
         // Load card states and filter due cards
-        await loadCardStatesAndFilter(parsedData.flashcardId, cards)
+        await loadCardStatesAndFilter(parsedData.flashcardId, cards, studyAllCards)
       } catch (error) {
         console.error('Error loading flashcard study data:', error)
         setError('Failed to load flashcard data. Please try again.')
@@ -182,7 +234,7 @@ export default function FlashcardStudyPage() {
     
     // Reload card states to get updated due_times
     try {
-      await loadCardStatesAndFilter(studyData.flashcardId, allCards)
+      await loadCardStatesAndFilter(studyData.flashcardId, allCards, studyAllCards)
     } catch (error) {
       console.error('Error reloading card states:', error)
       // If error, just remove current card and continue
@@ -201,7 +253,28 @@ export default function FlashcardStudyPage() {
   }
 
   const handleClose = () => {
-    router.push('/flashcard-edit')
+    // Try to get folder info from study data to navigate back to folder
+    if (studyData) {
+      // Store data in format expected by edit page
+      const editPageData = {
+        fileId: studyData.fileId,
+        flashcardId: studyData.flashcardId,
+        flashcardName: studyData.flashcardName,
+        folderName: studyData.folderName,
+        cards: allCards, // Use allCards to ensure we have all cards
+        cardCount: allCards.length,
+        filename: studyData.filename,
+        cached: false,
+        createdAt: studyData.createdAt
+      }
+      sessionStorage.setItem('generatedFlashcards', JSON.stringify(editPageData))
+      
+      // Navigate to edit page
+      router.push('/flashcard-edit')
+    } else {
+      // Fallback: navigate to dashboard
+      router.push('/dashboard')
+    }
   }
 
   if (loading) {
@@ -267,14 +340,29 @@ export default function FlashcardStudyPage() {
             </div>
             <h2 className="text-3xl font-bold text-gray-900 mb-4">You're done for now.</h2>
             <p className="text-gray-600 mb-6">
-              All available flashcards have been reviewed. Come back when more cards are due.
+              All due flashcards have been reviewed. You can study all cards again or come back when more cards are due.
             </p>
-            <button
-              onClick={handleClose}
-              className="px-6 py-3 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors font-medium"
-            >
-              Return to Flashcards
-            </button>
+            <div className="flex gap-4 justify-center">
+              <button
+                onClick={async () => {
+                  setStudyAllCards(true)
+                  setIsDone(false)
+                  // Reload to show all cards
+                  if (studyData) {
+                    await loadCardStatesAndFilter(studyData.flashcardId, allCards, true)
+                  }
+                }}
+                className="px-6 py-3 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors font-medium"
+              >
+                Study All Cards
+              </button>
+              <button
+                onClick={handleClose}
+                className="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+              >
+                Return to Flashcards
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -358,7 +446,7 @@ export default function FlashcardStudyPage() {
                 onClick={() => handleRating('again')}
                 className="px-6 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all duration-200 hover:scale-105 hover:shadow-lg font-medium"
               >
-                Again (1 min)
+                Again {'< 1 min'}
               </button>
 
               {/* Good Button - Yellow */}
@@ -366,7 +454,7 @@ export default function FlashcardStudyPage() {
                 onClick={() => handleRating('good')}
                 className="px-6 py-3 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-all duration-200 hover:scale-105 hover:shadow-lg font-medium"
               >
-                Good (3 min)
+                Good {'< 10 min'}
               </button>
 
               {/* Easy Button - Green */}
@@ -374,7 +462,7 @@ export default function FlashcardStudyPage() {
                 onClick={() => handleRating('easy')}
                 className="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-all duration-200 hover:scale-105 hover:shadow-lg font-medium"
               >
-                Easy (10 min)
+                Easy {'< 30 min'}
               </button>
             </div>
           )}

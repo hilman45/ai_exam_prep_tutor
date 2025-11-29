@@ -1708,6 +1708,84 @@ async def get_flashcards_by_folder(
             detail=f"Error fetching flashcards: {str(e)}"
         )
 
+@router.get("/flashcards/{flashcard_id}")
+async def get_flashcard(
+    flashcard_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get a single flashcard set by ID.
+    """
+    try:
+        # Verify flashcard set ownership
+        await verify_resource_ownership(flashcard_id, "flashcards", current_user.id)
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{settings.SUPABASE_URL}/rest/v1/flashcards",
+                headers={
+                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                    "apikey": settings.SUPABASE_SERVICE_KEY,
+                    "Content-Type": "application/json"
+                },
+                params={
+                    "id": f"eq.{flashcard_id}",
+                    "user_id": f"eq.{current_user.id}",
+                    "select": "id,file_id,user_id,cards,folder_id,created_at,custom_name"
+                }
+            )
+            
+            if response.status_code == 200:
+                flashcards = response.json()
+                if not flashcards or len(flashcards) == 0:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="Flashcard set not found"
+                    )
+                
+                flashcard = flashcards[0]
+                
+                # Get filename for the flashcard by fetching the associated file
+                try:
+                    file_response = await client.get(
+                        f"{settings.SUPABASE_URL}/rest/v1/files",
+                        headers={
+                            "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                            "apikey": settings.SUPABASE_SERVICE_KEY,
+                            "Content-Type": "application/json"
+                        },
+                        params={
+                            "id": f"eq.{flashcard['file_id']}",
+                            "user_id": f"eq.{current_user.id}",
+                            "select": "filename"
+                        }
+                    )
+                    
+                    if file_response.status_code == 200 and file_response.json():
+                        flashcard['filename'] = file_response.json()[0]['filename']
+                    else:
+                        flashcard['filename'] = 'Unknown file'
+                except:
+                    flashcard['filename'] = 'Unknown file'
+                
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content=flashcard
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to fetch flashcard"
+                )
+                
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching flashcard: {str(e)}"
+        )
+
 @router.put("/quiz/{quiz_id}")
 async def update_quiz(
     quiz_id: str,
@@ -2462,38 +2540,46 @@ async def update_card_state(
     rating: str,
     client: httpx.AsyncClient
 ) -> Dict[str, Any]:
-    """Update card state based on rating (Anki-like logic)."""
+    """Update card state based on rating (fixed short intervals, no spaced repetition)."""
     
     # Get current state or initialize defaults
     current_state = await get_or_init_card_state(user_id, flashcard_set_id, flashcard_id, client)
     
     now = datetime.utcnow()
     
-    # Determine new interval based on rating
+    # Fixed intervals (in minutes) - these never grow or scale
+    # Again → < 1 minute (use 1 minute)
+    # Good → < 10 minutes (use 10 minutes)
+    # Easy → < 30 minutes (use 30 minutes)
     if rating == "again":
         new_interval = 1  # 1 minute
-        new_streak = 0
         new_easy_count = current_state.get("easy_count", 0) if current_state else 0
     elif rating == "good":
-        new_interval = 3  # 3 minutes
-        new_streak = (current_state.get("correct_streak", 0) if current_state else 0) + 1
-        new_easy_count = current_state.get("easy_count", 0) if current_state else 0
-    else:  # easy
         new_interval = 10  # 10 minutes
-        new_streak = (current_state.get("correct_streak", 0) if current_state else 0) + 1
+        new_easy_count = current_state.get("easy_count", 0) if current_state else 0
+    elif rating == "easy":
+        new_interval = 30  # 30 minutes
         new_easy_count = (current_state.get("easy_count", 0) if current_state else 0) + 1
+    else:
+        # Default to "again" if invalid rating
+        new_interval = 1
+        new_easy_count = current_state.get("easy_count", 0) if current_state else 0
+    
+    # Note: We don't track streaks anymore since intervals are fixed
+    # Keep correct_streak for backward compatibility but it's not used
+    new_streak = current_state.get("correct_streak", 0) if current_state else 0
     
     # Calculate new due time
     new_due_time = now + timedelta(minutes=new_interval)
     
-    # Check if card is finished (easy_count >= 3 OR correct_streak >= 2)
-    is_finished = new_easy_count >= 3 or new_streak >= 2
+    # Cards are never truly "finished" - they can always be reviewed again
+    is_finished = False
     
     state_data = {
         "user_id": user_id,
         "flashcard_set_id": flashcard_set_id,
         "flashcard_id": flashcard_id,
-        "interval": new_interval,
+        "interval": new_interval,  # Already an integer
         "due_time": new_due_time.isoformat(),
         "correct_streak": new_streak,
         "easy_count": new_easy_count,
@@ -2813,7 +2899,7 @@ async def record_flashcard_review(
     
     This endpoint:
     - Records the review in flashcard_reviews table
-    - Updates the card state (Anki-like logic) based on rating
+    - Updates the card state (fixed short intervals) based on rating
     - Updates daily analytics
     
     Args:
