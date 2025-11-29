@@ -45,12 +45,27 @@ export default function FlashcardEditPage() {
 
         if (!flashcardId) {
           // Fallback to sessionStorage for backward compatibility
-          const storedFlashcards = sessionStorage.getItem('generatedFlashcards')
+          // First try generatedFlashcards (from edit/generator flow)
+          let storedFlashcards = sessionStorage.getItem('generatedFlashcards')
+          
+          // If not found, try flashcardStudyModeData (from study flow)
+          if (!storedFlashcards) {
+            storedFlashcards = sessionStorage.getItem('flashcardStudyModeData')
+          }
+          
           if (storedFlashcards) {
             try {
               const parsedFlashcards = JSON.parse(storedFlashcards)
+              // Ensure cards is an array
+              const cards = Array.isArray(parsedFlashcards.cards) ? parsedFlashcards.cards : []
+              
+              if (cards.length === 0) {
+                setError('No flashcards found in this set. Please generate new flashcards.')
+                return
+              }
+              
               setFlashcardsData(parsedFlashcards)
-              setEditedCards(parsedFlashcards.cards)
+              setEditedCards(cards)
               return
             } catch (error) {
               console.error('Error parsing flashcard data:', error)

@@ -12,12 +12,17 @@ interface StudyStreak {
   last_study_date: string | null
 }
 
+const FOLDERS_CACHE_KEY = 'dashboard_folders_cache'
+const FOLDERS_CACHE_TIMESTAMP_KEY = 'dashboard_folders_cache_timestamp'
+const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
+
 export default function DashboardPage() {
   const [folderMenuOpen, setFolderMenuOpen] = useState<string | null>(null)
   const [addFolderModalOpen, setAddFolderModalOpen] = useState(false)
   const [folderName, setFolderName] = useState('')
   const [folders, setFolders] = useState<Folder[]>([])
-  const [foldersLoading, setFoldersLoading] = useState(true)
+  const [foldersLoading, setFoldersLoading] = useState(false) // Start with false for instant display
+  const [isInitialLoad, setIsInitialLoad] = useState(true) // Track if we're showing cached data
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
   const [studyStreak, setStudyStreak] = useState<StudyStreak | null>(null)
   const [streakLoading, setStreakLoading] = useState(true)
@@ -42,11 +47,60 @@ export default function DashboardPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  // Load cached folders from localStorage
+  const loadCachedFolders = (): Folder[] | null => {
+    if (typeof window === 'undefined') return null
+    
+    try {
+      const cached = localStorage.getItem(FOLDERS_CACHE_KEY)
+      const timestamp = localStorage.getItem(FOLDERS_CACHE_TIMESTAMP_KEY)
+      
+      if (cached && timestamp) {
+        const cacheAge = Date.now() - parseInt(timestamp, 10)
+        // Use cache if it's less than 5 minutes old
+        if (cacheAge < CACHE_DURATION) {
+          return JSON.parse(cached)
+        }
+      }
+    } catch (error) {
+      console.error('Error loading cached folders:', error)
+    }
+    
+    return null
+  }
+
+  // Save folders to cache
+  const saveFoldersToCache = (folders: Folder[]) => {
+    if (typeof window === 'undefined') return
+    
+    try {
+      localStorage.setItem(FOLDERS_CACHE_KEY, JSON.stringify(folders))
+      localStorage.setItem(FOLDERS_CACHE_TIMESTAMP_KEY, Date.now().toString())
+    } catch (error) {
+      console.error('Error saving folders to cache:', error)
+    }
+  }
+
   const loadFolders = async () => {
+    // First, try to load from cache for instant display
+    const cachedFolders = loadCachedFolders()
+    if (cachedFolders) {
+      setFolders(cachedFolders)
+      setIsInitialLoad(false)
+      
+      // Set the first folder as selected
+      if (cachedFolders.length > 0) {
+        setSelectedFolderId(cachedFolders[0].id)
+      }
+    }
+    
+    // Then fetch fresh data in the background
     try {
       setFoldersLoading(true)
       const userFolders = await folderService.getFolders()
       setFolders(userFolders)
+      saveFoldersToCache(userFolders)
+      setIsInitialLoad(false)
       
       // Set the first folder as selected (usually the "Untitled" folder)
       if (userFolders.length > 0) {
@@ -54,6 +108,10 @@ export default function DashboardPage() {
       }
     } catch (error) {
       console.error('Error loading folders:', error)
+      // If fetch fails and we have no cache, show error state
+      if (!cachedFolders) {
+        setIsInitialLoad(false)
+      }
     } finally {
       setFoldersLoading(false)
     }
@@ -65,7 +123,9 @@ export default function DashboardPage() {
         const newFolder = await folderService.createFolder({
           name: folderName.trim()
         })
-        setFolders(prev => [...prev, newFolder])
+        const updatedFolders = [...folders, newFolder]
+        setFolders(updatedFolders)
+        saveFoldersToCache(updatedFolders) // Update cache
         setFolderName('')
         setAddFolderModalOpen(false)
       } catch (error) {
@@ -197,6 +257,11 @@ export default function DashboardPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
                   </svg>
                   <h2 className="text-lg font-semibold text-gray-800">Folder</h2>
+                  {foldersLoading && folders.length > 0 && (
+                    <div className="ml-2 flex items-center">
+                      <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                    </div>
+                  )}
                 </div>
                 <button 
                   className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-opacity-90 transition-colors"
@@ -210,10 +275,27 @@ export default function DashboardPage() {
               <div className="border-t border-gray-200 mb-4"></div>
 
               {/* Folders List */}
-              {foldersLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
-                  <span className="ml-2 text-gray-600">Loading folders...</span>
+              {isInitialLoad && folders.length === 0 ? (
+                // Skeleton loading for first-time visitors
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {[1, 2, 3].map((i) => (
+                    <div 
+                      key={i}
+                      className="border border-slate-200 rounded-lg p-4 animate-pulse"
+                      style={{backgroundColor: '#F3F3F3'}}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="h-5 bg-gray-300 rounded w-3/4 mb-3"></div>
+                          <div className="flex items-center space-x-4">
+                            <div className="h-4 bg-gray-300 rounded w-24"></div>
+                            <div className="h-4 bg-gray-300 rounded w-20"></div>
+                          </div>
+                        </div>
+                        <div className="w-6 h-6 bg-gray-300 rounded"></div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : folders.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">

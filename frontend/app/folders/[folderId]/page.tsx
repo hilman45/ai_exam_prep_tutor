@@ -9,13 +9,29 @@ import { flashcardService, FlashcardSet } from '../../../lib/flashcardService'
 import DashboardLayout from '../../../components/DashboardLayout'
 import KebabMenu from '../../../components/KebabMenu'
 
+const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
+
+// Cache key helpers
+const getCacheKey = (type: 'summaries' | 'quizzes' | 'flashcards', folderId: string) => 
+  `folder_${type}_${folderId}`
+const getCacheTimestampKey = (type: 'summaries' | 'quizzes' | 'flashcards', folderId: string) => 
+  `folder_${type}_${folderId}_timestamp`
+
 export default function FolderPage() {
   const [folder, setFolder] = useState<Folder | null>(null)
   const [activeTab, setActiveTab] = useState<'notes' | 'quiz' | 'flashcards'>('notes')
   const [summaries, setSummaries] = useState<Summary[]>([])
   const [quizzes, setQuizzes] = useState<Quiz[]>([])
   const [flashcards, setFlashcards] = useState<FlashcardSet[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false) // Start with false for instant display
+  const [summariesLoading, setSummariesLoading] = useState(false)
+  const [quizzesLoading, setQuizzesLoading] = useState(false)
+  const [flashcardsLoading, setFlashcardsLoading] = useState(false)
+  const [isInitialLoad, setIsInitialLoad] = useState({
+    summaries: true,
+    quizzes: true,
+    flashcards: true
+  })
   const [error, setError] = useState<string | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<{
     type: 'note' | 'quiz' | 'flashcard' | null
@@ -37,20 +53,50 @@ export default function FolderPage() {
     }
   }, [params.folderId])
 
+  // Generic cache loader
+  const loadCachedData = <T,>(type: 'summaries' | 'quizzes' | 'flashcards', folderId: string): T[] | null => {
+    if (typeof window === 'undefined') return null
+    
+    try {
+      const cached = localStorage.getItem(getCacheKey(type, folderId))
+      const timestamp = localStorage.getItem(getCacheTimestampKey(type, folderId))
+      
+      if (cached && timestamp) {
+        const cacheAge = Date.now() - parseInt(timestamp, 10)
+        if (cacheAge < CACHE_DURATION) {
+          return JSON.parse(cached)
+        }
+      }
+    } catch (error) {
+      console.error(`Error loading cached ${type}:`, error)
+    }
+    
+    return null
+  }
+
+  // Generic cache saver
+  const saveDataToCache = <T,>(type: 'summaries' | 'quizzes' | 'flashcards', folderId: string, data: T[]) => {
+    if (typeof window === 'undefined') return
+    
+    try {
+      localStorage.setItem(getCacheKey(type, folderId), JSON.stringify(data))
+      localStorage.setItem(getCacheTimestampKey(type, folderId), Date.now().toString())
+    } catch (error) {
+      console.error(`Error saving ${type} to cache:`, error)
+    }
+  }
+
   const loadFolder = async (folderId: string) => {
     try {
-      setLoading(true)
       setError(null)
       const userFolders = await folderService.getFolders()
       const foundFolder = userFolders.find(f => f.id === folderId)
       if (foundFolder) {
         setFolder(foundFolder)
-        // Load summaries and quizzes for this folder
-        await Promise.all([
-          loadSummaries(folderId),
-          loadQuizzes(folderId),
-          loadFlashcards(folderId)
-        ])
+        // Load summaries, quizzes, and flashcards (with caching)
+        loadSummaries(folderId)
+        loadQuizzes(folderId)
+        loadFlashcards(folderId)
       } else {
         // Folder not found, redirect to dashboard
         router.push('/dashboard')
@@ -58,44 +104,88 @@ export default function FolderPage() {
     } catch (error) {
       console.error('Error loading folder:', error)
       setError('Failed to load folder. Please try again.')
-    } finally {
-      setLoading(false)
     }
   }
 
   const loadSummaries = async (folderId: string) => {
+    // First, try to load from cache for instant display
+    const cachedSummaries = loadCachedData<Summary>('summaries', folderId)
+    if (cachedSummaries) {
+      setSummaries(cachedSummaries)
+      setIsInitialLoad(prev => ({ ...prev, summaries: false }))
+    }
+    
+    // Then fetch fresh data in the background
     try {
+      setSummariesLoading(true)
       const folderSummaries = await notesService.getSummariesByFolder(folderId)
       console.log('Fetched summaries:', folderSummaries) // Debug log
       setSummaries(folderSummaries)
+      saveDataToCache('summaries', folderId, folderSummaries)
+      setIsInitialLoad(prev => ({ ...prev, summaries: false }))
     } catch (error) {
       console.error('Error loading summaries:', error)
-      setSummaries([])
-      setError('Failed to load notes. Please try again.')
+      if (!cachedSummaries) {
+        setSummaries([])
+        setError('Failed to load notes. Please try again.')
+        setIsInitialLoad(prev => ({ ...prev, summaries: false }))
+      }
+    } finally {
+      setSummariesLoading(false)
     }
   }
 
   const loadQuizzes = async (folderId: string) => {
+    // First, try to load from cache for instant display
+    const cachedQuizzes = loadCachedData<Quiz>('quizzes', folderId)
+    if (cachedQuizzes) {
+      setQuizzes(cachedQuizzes)
+      setIsInitialLoad(prev => ({ ...prev, quizzes: false }))
+    }
+    
+    // Then fetch fresh data in the background
     try {
+      setQuizzesLoading(true)
       const folderQuizzes = await quizService.getQuizzesByFolder(folderId)
       console.log('Fetched quizzes:', folderQuizzes) // Debug log
       setQuizzes(folderQuizzes)
+      saveDataToCache('quizzes', folderId, folderQuizzes)
+      setIsInitialLoad(prev => ({ ...prev, quizzes: false }))
     } catch (error) {
       console.error('Error loading quizzes:', error)
-      setQuizzes([])
-      // Don't set error for quizzes since the endpoint might not be implemented yet
+      if (!cachedQuizzes) {
+        setQuizzes([])
+        setIsInitialLoad(prev => ({ ...prev, quizzes: false }))
+      }
+    } finally {
+      setQuizzesLoading(false)
     }
   }
 
   const loadFlashcards = async (folderId: string) => {
+    // First, try to load from cache for instant display
+    const cachedFlashcards = loadCachedData<FlashcardSet>('flashcards', folderId)
+    if (cachedFlashcards) {
+      setFlashcards(cachedFlashcards)
+      setIsInitialLoad(prev => ({ ...prev, flashcards: false }))
+    }
+    
+    // Then fetch fresh data in the background
     try {
+      setFlashcardsLoading(true)
       const folderFlashcards = await flashcardService.getFlashcardsByFolder(folderId)
       console.log('Fetched flashcards:', folderFlashcards) // Debug log
       setFlashcards(folderFlashcards)
+      saveDataToCache('flashcards', folderId, folderFlashcards)
+      setIsInitialLoad(prev => ({ ...prev, flashcards: false }))
     } catch (error) {
       console.error('Error loading flashcards:', error)
-      setFlashcards([])
-      // Don't set error for flashcards since the endpoint might not be implemented yet
+      if (!cachedFlashcards) {
+        setFlashcards([])
+        setIsInitialLoad(prev => ({ ...prev, flashcards: false }))
+      }
+    } finally {
+      setFlashcardsLoading(false)
     }
   }
 
@@ -163,20 +253,33 @@ export default function FolderPage() {
   }
 
   const handleOpenFlashcards = (flashcard: FlashcardSet) => {
+    // Ensure cards is an array
+    const cards = Array.isArray(flashcard.cards) ? flashcard.cards : []
+    
+    if (cards.length === 0) {
+      console.error('No cards found in flashcard set:', flashcard.id)
+      setError('This flashcard set has no cards. Please generate new flashcards.')
+      return
+    }
+    
     // Store flashcard data in sessionStorage for flashcard study mode
     const flashcardStudyModeData = {
       fileId: flashcard.file_id,
       flashcardId: flashcard.id,
       flashcardName: flashcard.custom_name || flashcard.filename || 'Generated Flashcards',
       folderName: folderName,
-      cards: flashcard.cards,
-      cardCount: flashcard.cards?.length || 0,
+      cards: cards, // Ensure we store the full array
+      cardCount: cards.length,
       filename: flashcard.filename || 'Unknown File',
       cached: false,
       createdAt: flashcard.created_at
     }
     
+    console.log(`Storing ${cards.length} cards for flashcard study session`)
     sessionStorage.setItem('flashcardStudyModeData', JSON.stringify(flashcardStudyModeData))
+    
+    // Also store in format expected by edit page
+    sessionStorage.setItem('generatedFlashcards', JSON.stringify(flashcardStudyModeData))
     
     // Navigate to flashcard study mode
     router.push('/flashcard-study')
@@ -227,20 +330,27 @@ export default function FolderPage() {
   }
 
   const confirmDelete = async () => {
-    if (!deleteConfirm.id || !deleteConfirm.type) return
+    if (!deleteConfirm.id || !deleteConfirm.type || !params.folderId) return
 
     try {
       setDeleting(true)
+      const folderId = params.folderId as string
       
       if (deleteConfirm.type === 'note') {
         await notesService.deleteSummary(deleteConfirm.id)
-        setSummaries(summaries.filter(s => s.id !== deleteConfirm.id))
+        const updatedSummaries = summaries.filter(s => s.id !== deleteConfirm.id)
+        setSummaries(updatedSummaries)
+        saveDataToCache('summaries', folderId, updatedSummaries)
       } else if (deleteConfirm.type === 'quiz') {
         await quizService.deleteQuiz(deleteConfirm.id)
-        setQuizzes(quizzes.filter(q => q.id !== deleteConfirm.id))
+        const updatedQuizzes = quizzes.filter(q => q.id !== deleteConfirm.id)
+        setQuizzes(updatedQuizzes)
+        saveDataToCache('quizzes', folderId, updatedQuizzes)
       } else if (deleteConfirm.type === 'flashcard') {
         await flashcardService.deleteFlashcard(deleteConfirm.id)
-        setFlashcards(flashcards.filter(f => f.id !== deleteConfirm.id))
+        const updatedFlashcards = flashcards.filter(f => f.id !== deleteConfirm.id)
+        setFlashcards(updatedFlashcards)
+        saveDataToCache('flashcards', folderId, updatedFlashcards)
       }
 
       setDeleteConfirm({ type: null, id: null, name: null })
@@ -256,14 +366,18 @@ export default function FolderPage() {
     setDeleteConfirm({ type: null, id: null, name: null })
   }
 
-  // Refresh quizzes when returning from quiz edit
+  // Refresh data when returning from edit pages
   useEffect(() => {
     const handleFocus = () => {
       if (params.folderId) {
+        const folderId = params.folderId as string
+        // Refresh the active tab's data when window regains focus
         if (activeTab === 'quiz') {
-          loadQuizzes(params.folderId as string)
+          loadQuizzes(folderId)
         } else if (activeTab === 'flashcards') {
-          loadFlashcards(params.folderId as string)
+          loadFlashcards(folderId)
+        } else if (activeTab === 'notes') {
+          loadSummaries(folderId)
         }
       }
     }
@@ -345,10 +459,24 @@ export default function FolderPage() {
                         Retry
                       </button>
                     </div>
-                  ) : loading ? (
-                    <div className="flex items-center justify-center py-8">
-                      <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
-                      <span className="ml-2 text-gray-600">Loading notes...</span>
+                  ) : isInitialLoad.summaries && summaries.length === 0 ? (
+                    // Skeleton loading for first-time visitors
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {[1, 2, 3].map((i) => (
+                        <div
+                          key={i}
+                          className="bg-white border border-slate-200 rounded-lg p-4 animate-pulse"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="h-5 bg-gray-300 rounded w-3/4 mb-3"></div>
+                              <div className="h-4 bg-gray-300 rounded w-1/2 mb-2"></div>
+                              <div className="h-4 bg-gray-300 rounded w-1/3"></div>
+                            </div>
+                            <div className="w-16 h-8 bg-gray-300 rounded ml-4"></div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   ) : summaries.length === 0 ? (
                     <div className="text-center">
@@ -373,6 +501,13 @@ export default function FolderPage() {
                     </div>
                   ) : (
                     <div>
+                      {/* Loading indicator when refreshing cached data */}
+                      {summariesLoading && summaries.length > 0 && (
+                        <div className="mb-4 flex items-center justify-center">
+                          <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                          <span className="ml-2 text-sm text-gray-600">Refreshing...</span>
+                        </div>
+                      )}
                       {/* Notes List */}
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {summaries.map((summary) => (
@@ -452,10 +587,25 @@ export default function FolderPage() {
 
               {activeTab === 'quiz' && (
                 <div>
-                  {loading ? (
-                    <div className="flex items-center justify-center py-8">
-                      <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
-                      <span className="ml-2 text-gray-600">Loading quizzes...</span>
+                  {isInitialLoad.quizzes && quizzes.length === 0 ? (
+                    // Skeleton loading for first-time visitors
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {[1, 2, 3].map((i) => (
+                        <div
+                          key={i}
+                          className="bg-white border border-slate-200 rounded-lg p-4 animate-pulse"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="h-5 bg-gray-300 rounded w-3/4 mb-3"></div>
+                              <div className="h-4 bg-gray-300 rounded w-1/2 mb-2"></div>
+                              <div className="h-4 bg-gray-300 rounded w-1/3 mb-2"></div>
+                              <div className="h-4 bg-gray-300 rounded w-1/3"></div>
+                            </div>
+                            <div className="w-16 h-8 bg-gray-300 rounded ml-4"></div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   ) : quizzes.length === 0 ? (
                     <div className="text-center">
@@ -480,6 +630,13 @@ export default function FolderPage() {
                     </div>
                   ) : (
                     <div>
+                      {/* Loading indicator when refreshing cached data */}
+                      {quizzesLoading && quizzes.length > 0 && (
+                        <div className="mb-4 flex items-center justify-center">
+                          <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                          <span className="ml-2 text-sm text-gray-600">Refreshing...</span>
+                        </div>
+                      )}
                       {/* Quiz List */}
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {quizzes.map((quiz) => (
@@ -565,10 +722,25 @@ export default function FolderPage() {
 
               {activeTab === 'flashcards' && (
                 <div>
-                  {loading ? (
-                    <div className="flex items-center justify-center py-8">
-                      <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
-                      <span className="ml-2 text-gray-600">Loading flashcards...</span>
+                  {isInitialLoad.flashcards && flashcards.length === 0 ? (
+                    // Skeleton loading for first-time visitors
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {[1, 2, 3].map((i) => (
+                        <div
+                          key={i}
+                          className="bg-white border border-slate-200 rounded-lg p-4 animate-pulse"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="h-5 bg-gray-300 rounded w-3/4 mb-3"></div>
+                              <div className="h-4 bg-gray-300 rounded w-1/2 mb-2"></div>
+                              <div className="h-4 bg-gray-300 rounded w-1/3 mb-2"></div>
+                              <div className="h-4 bg-gray-300 rounded w-1/3"></div>
+                            </div>
+                            <div className="w-16 h-8 bg-gray-300 rounded ml-4"></div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   ) : flashcards.length === 0 ? (
                     <div className="text-center">
@@ -593,6 +765,13 @@ export default function FolderPage() {
                     </div>
                   ) : (
                     <div>
+                      {/* Loading indicator when refreshing cached data */}
+                      {flashcardsLoading && flashcards.length > 0 && (
+                        <div className="mb-4 flex items-center justify-center">
+                          <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                          <span className="ml-2 text-sm text-gray-600">Refreshing...</span>
+                        </div>
+                      )}
                       {/* Flashcards List */}
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {flashcards.map((flashcard) => (
