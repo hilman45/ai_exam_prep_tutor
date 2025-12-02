@@ -3113,52 +3113,74 @@ async def get_study_streak_analytics(
     try:
         async with httpx.AsyncClient() as client:
             # Get user profile with streak data
+            print(f"DEBUG: Fetching streak for user_id: {current_user.id}")  # Debug log
+            # Use URL format for query parameters (matching other parts of the codebase)
+            url = f"{settings.SUPABASE_URL}/rest/v1/user_profiles?user_id=eq.{current_user.id}&select=current_streak,longest_streak,last_study_date&limit=1"
+            print(f"DEBUG: Request URL: {url}")  # Debug log
             response = await client.get(
-                f"{settings.SUPABASE_URL}/rest/v1/user_profiles",
+                url,
                 headers={
                     "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
                     "apikey": settings.SUPABASE_SERVICE_KEY,
                     "Content-Type": "application/json"
-                },
-                params={
-                    "user_id": f"eq.{current_user.id}",
-                    "select": "current_streak,longest_streak,last_study_date",
-                    "limit": "1"
                 }
             )
+            
+            print(f"DEBUG: Response status: {response.status_code}")  # Debug log
             
             if response.status_code != 200:
+                print(f"DEBUG: Non-200 status, returning defaults")  # Debug log
                 # Return defaults if profile doesn't exist
-                return JSONResponse(
-                    status_code=status.HTTP_200_OK,
-                    content={
-                        "current_streak": 0,
-                        "longest_streak": 0,
-                        "last_study_date": None
-                    }
-                )
+                return {
+                    "current_streak": 0,
+                    "longest_streak": 0,
+                    "last_study_date": None
+                }
             
             profile_data = response.json()
+            print(f"DEBUG: Profile data from Supabase: {profile_data}")  # Debug log
+            print(f"DEBUG: Profile data type: {type(profile_data)}, length: {len(profile_data) if isinstance(profile_data, list) else 'N/A'}")  # Debug log
+            
             if not profile_data or len(profile_data) == 0:
                 # Profile doesn't exist, return defaults
-                return JSONResponse(
-                    status_code=status.HTTP_200_OK,
-                    content={
-                        "current_streak": 0,
-                        "longest_streak": 0,
-                        "last_study_date": None
-                    }
-                )
+                return {
+                    "current_streak": 0,
+                    "longest_streak": 0,
+                    "last_study_date": None
+                }
             
             profile = profile_data[0]
-            return JSONResponse(
-                status_code=status.HTTP_200_OK,
-                content={
-                    "current_streak": profile.get("current_streak", 0) or 0,
-                    "longest_streak": profile.get("longest_streak", 0) or 0,
-                    "last_study_date": profile.get("last_study_date")
-                }
-            )
+            print(f"DEBUG: Raw profile data: {profile}")  # Debug log
+            print(f"DEBUG: Profile keys: {profile.keys()}")  # Debug log
+            
+            # Get streak values, handling None and ensuring they're integers
+            current_streak = profile.get("current_streak")
+            longest_streak = profile.get("longest_streak")
+            
+            print(f"DEBUG: Raw current_streak: {current_streak}, type: {type(current_streak)}")  # Debug log
+            print(f"DEBUG: Raw longest_streak: {longest_streak}, type: {type(longest_streak)}")  # Debug log
+            
+            # Convert to int, handling None, strings, and actual numbers
+            try:
+                current_streak = int(current_streak) if current_streak is not None else 0
+            except (ValueError, TypeError):
+                print(f"DEBUG: Error converting current_streak, using 0")  # Debug log
+                current_streak = 0
+                
+            try:
+                longest_streak = int(longest_streak) if longest_streak is not None else 0
+            except (ValueError, TypeError):
+                print(f"DEBUG: Error converting longest_streak, using 0")  # Debug log
+                longest_streak = 0
+            
+            result = {
+                "current_streak": current_streak,
+                "longest_streak": longest_streak,
+                "last_study_date": profile.get("last_study_date")
+            }
+            
+            print(f"DEBUG: Returning streak data: {result}")  # Debug log
+            return result
             
     except Exception as e:
         raise HTTPException(

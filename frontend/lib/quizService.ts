@@ -350,16 +350,28 @@ class QuizService {
   }> {
     try {
       const headers = await this.getAuthHeaders()
-      const response = await fetch(`${API_BASE_URL}/analytics/streak`, {
+      const response = await fetch(`${API_BASE_URL}/ai/analytics/streak`, {
         method: 'GET',
         headers,
       })
 
       if (!response.ok) {
+        console.error('Study streak response not OK:', response.status, response.statusText)
         throw new Error(`Failed to fetch study streak: ${response.statusText}`)
       }
 
-      return await response.json()
+      const data = await response.json()
+      console.log('Study streak response data:', data)
+      
+      // Ensure we have valid numbers
+      const result = {
+        current_streak: typeof data.current_streak === 'number' ? data.current_streak : parseInt(data.current_streak) || 0,
+        longest_streak: typeof data.longest_streak === 'number' ? data.longest_streak : parseInt(data.longest_streak) || 0,
+        last_study_date: data.last_study_date || null,
+      }
+      
+      console.log('Study streak parsed result:', result)
+      return result
     } catch (error) {
       console.error('Error fetching study streak:', error)
       // Return defaults on error
