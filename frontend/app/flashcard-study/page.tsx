@@ -38,6 +38,7 @@ export default function FlashcardStudyPage() {
   const [error, setError] = useState<string | null>(null)
   const [isDone, setIsDone] = useState(false) // True when no cards are due
   const [studyAllCards, setStudyAllCards] = useState(false) // If true, show all cards regardless of due time
+  const [showModal, setShowModal] = useState(false) // Modal visibility for info button
   const cardStartTime = useRef<number>(Date.now())
   const router = useRouter()
 
@@ -252,6 +253,14 @@ export default function FlashcardStudyPage() {
     }
   }
 
+  const handleInfoClick = () => {
+    setShowModal(true)
+  }
+
+  const handleCloseModal = () => {
+    setShowModal(false)
+  }
+
   const handleClose = () => {
     // Try to get folder info from study data to navigate back to folder
     if (studyData) {
@@ -375,30 +384,42 @@ export default function FlashcardStudyPage() {
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200">
-        {/* Close Button */}
+      <div className="relative p-4">
+        {/* Close Button - Absolute positioned */}
         <button
           onClick={handleClose}
-          className="text-gray-400 hover:text-gray-600 transition-colors"
+          className="absolute top-4 left-4 text-gray-400 hover:text-gray-600 transition-colors"
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
 
-        {/* Flashcard Set Name */}
-        <div className="flex-1 text-center">
+        {/* Title - Centered */}
+        <div className="text-center mb-4">
           <h1 className="text-xl font-bold text-gray-900">{studyData.flashcardName}</h1>
         </div>
 
-        {/* Card Counter */}
-        <div className="text-sm font-medium text-gray-600">
-          {currentCardIndex + 1}/{dueCards.length}
+        {/* Progress Bar */}
+        <div className="max-w-md mx-auto mb-2">
+          <div className="w-full bg-gray-200 rounded-full h-2">
+            <div 
+              className="bg-green-500 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${((currentCardIndex + 1) / dueCards.length) * 100}%` }}
+            ></div>
+          </div>
+        </div>
+
+        {/* Progress Counter - Centered (Countup) */}
+        <div className="text-center">
+          <span className="text-sm font-medium text-gray-700">
+            {currentCardIndex + 1} / {dueCards.length}
+          </span>
         </div>
       </div>
 
       {/* Main Content - Centered Flashcard */}
-      <div className="flex items-center justify-center min-h-[calc(100vh-200px)] p-6">
+      <div className="flex items-center justify-center min-h-[calc(100vh-280px)] p-6 pb-32">
         <div className="w-full max-w-2xl">
           {/* Flashcard */}
           <div
@@ -437,37 +458,145 @@ export default function FlashcardStudyPage() {
               </div>
             </div>
           </div>
-
-          {/* Action Buttons - Only show after flip */}
-          {isFlipped && (
-            <div className="mt-8 flex items-center justify-center space-x-4 flex-wrap gap-4">
-              {/* Again Button - Red */}
-              <button
-                onClick={() => handleRating('again')}
-                className="px-6 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all duration-200 hover:scale-105 hover:shadow-lg font-medium"
-              >
-                Again {'< 1 min'}
-              </button>
-
-              {/* Good Button - Yellow */}
-              <button
-                onClick={() => handleRating('good')}
-                className="px-6 py-3 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-all duration-200 hover:scale-105 hover:shadow-lg font-medium"
-              >
-                Good {'< 10 min'}
-              </button>
-
-              {/* Easy Button - Green */}
-              <button
-                onClick={() => handleRating('easy')}
-                className="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-all duration-200 hover:scale-105 hover:shadow-lg font-medium"
-              >
-                Easy {'< 30 min'}
-              </button>
-            </div>
-          )}
         </div>
       </div>
+
+      {/* Footer - Action Buttons - Only show after flip */}
+      {isFlipped && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4">
+          <div className="max-w-2xl mx-auto">
+            {/* Buttons */}
+            <div className="flex items-center justify-center space-x-4 mb-4">
+              {/* Again Button */}
+              <div className="flex flex-col items-center">
+                <span className="text-xs text-gray-500 mb-1">&lt;1m</span>
+                <button
+                  onClick={() => handleRating('again')}
+                  className="px-14 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-red-500 transition-colors font-medium flex items-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Again
+                </button>
+              </div>
+
+              {/* Good Button */}
+              <div className="flex flex-col items-center">
+                <span className="text-xs text-gray-500 mb-1">10min</span>
+                <button
+                  onClick={() => handleRating('good')}
+                  className="px-14 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-yellow-500 transition-colors font-medium flex items-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  Good
+                </button>
+              </div>
+
+              {/* Easy Button */}
+              <div className="flex flex-col items-center">
+                <span className="text-xs text-gray-500 mb-1">30min</span>
+                <button
+                  onClick={() => handleRating('easy')}
+                  className="px-14 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-green-500 transition-colors font-medium flex items-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Easy
+                </button>
+              </div>
+            </div>
+
+            {/* Info Button */}
+            <div className="flex justify-center">
+              <button
+                onClick={handleInfoClick}
+                className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                What do these buttons mean?
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal */}
+      {showModal && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={handleCloseModal}
+        >
+          <div 
+            className="bg-white rounded-lg p-6 max-w-md w-full shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-gray-900">What do these buttons mean?</h3>
+              <button
+                onClick={handleCloseModal}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="space-y-4 mb-6">
+              {/* Again */}
+              <div className="border-b border-gray-200 pb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs text-gray-500">&lt;1m</span>
+                  <h4 className="font-semibold text-gray-900">Again</h4>
+                </div>
+                <p className="text-sm text-gray-600">
+                  This card will be shown again in less than 1 minute. Use this option if you didn't remember the answer or need more practice with this card.
+                </p>
+              </div>
+
+              {/* Good */}
+              <div className="border-b border-gray-200 pb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs text-gray-500">10min</span>
+                  <h4 className="font-semibold text-gray-900">Good</h4>
+                </div>
+                <p className="text-sm text-gray-600">
+                  This card will be shown again in 10 minutes. Use this option if you remembered the answer correctly but want to review it again soon.
+                </p>
+              </div>
+
+              {/* Easy */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs text-gray-500">30min</span>
+                  <h4 className="font-semibold text-gray-900">Easy</h4>
+                </div>
+                <p className="text-sm text-gray-600">
+                  This card will be shown again in 30 minutes. Use this option if you remembered the answer easily and feel confident about it.
+                </p>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex justify-end">
+              <button
+                onClick={handleCloseModal}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+              >
+                Got it!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
