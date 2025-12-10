@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { QuizQuestion, quizService } from '../../lib/quizService'
+import QuizChat from '../../components/QuizChat'
 
 interface QuizModeData {
   fileId: string
@@ -27,9 +28,25 @@ export default function QuizModePage() {
   const [quizCompleted, setQuizCompleted] = useState(false)
   const [showReviewModal, setShowReviewModal] = useState(false)
   const [checkedQuestions, setCheckedQuestions] = useState<Set<number>>(new Set())
+  const [selectedQuestionForChat, setSelectedQuestionForChat] = useState<number | null>(null)
   const router = useRouter()
   const questionStartTime = useRef<number | null>(null)
   const trackedQuestions = useRef<Set<number>>(new Set())
+
+  // Scroll to question when chat is opened
+  useEffect(() => {
+    if (selectedQuestionForChat !== null && showReviewModal) {
+      const questionElement = document.getElementById(`question-${selectedQuestionForChat}`)
+      if (questionElement) {
+        setTimeout(() => {
+          questionElement.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center' 
+          })
+        }, 100)
+      }
+    }
+  }, [selectedQuestionForChat, showReviewModal])
 
   useEffect(() => {
     const loadQuizData = () => {
@@ -350,12 +367,16 @@ export default function QuizModePage() {
                   const userAnswer = userAnswers[index]
                   const isCorrect = userAnswer !== null && userAnswer === question.answer_index
                   const isAnswered = userAnswer !== null
+                  const isSelectedForChat = selectedQuestionForChat === index
                   
                   return (
                     <div
                       key={index}
-                      className={`border-2 rounded-lg p-4 ${
-                        !isAnswered
+                      id={`question-${index}`}
+                      className={`border-2 rounded-lg p-4 transition-all duration-300 ${
+                        isSelectedForChat
+                          ? 'border-primary bg-purple-50 shadow-lg ring-4 ring-primary ring-opacity-30'
+                          : !isAnswered
                           ? 'border-gray-200 bg-gray-50'
                           : isCorrect
                           ? 'border-green-200 bg-green-50'
@@ -365,7 +386,14 @@ export default function QuizModePage() {
                       {/* Question Number and Status */}
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold text-gray-900">Question {index + 1}</span>
+                          <span className={`font-semibold ${
+                            isSelectedForChat ? 'text-primary' : 'text-gray-900'
+                          }`}>
+                            Question {index + 1}
+                            {isSelectedForChat && (
+                              <span className="ml-2 text-primary text-sm">💬 Getting Help</span>
+                            )}
+                          </span>
                           {!isAnswered ? (
                             <span className="px-2 py-1 bg-gray-400 text-white text-xs font-medium rounded">
                               Not Answered
@@ -380,6 +408,48 @@ export default function QuizModePage() {
                             </span>
                           )}
                         </div>
+                        <button
+                          onClick={() => {
+                            if (selectedQuestionForChat === index) {
+                              setSelectedQuestionForChat(null)
+                            } else {
+                              setSelectedQuestionForChat(index)
+                              // Scroll to question when selected
+                              setTimeout(() => {
+                                const questionElement = document.getElementById(`question-${index}`)
+                                if (questionElement) {
+                                  questionElement.scrollIntoView({ 
+                                    behavior: 'smooth', 
+                                    block: 'center' 
+                                  })
+                                }
+                              }, 100)
+                            }
+                          }}
+                          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${
+                            isSelectedForChat 
+                              ? 'bg-gray-500 text-white' 
+                              : ''
+                          }`}
+                          style={!isSelectedForChat ? {
+                            backgroundColor: '#892CDC',
+                            color: '#FFFFFF'
+                          } : {}}
+                          onMouseEnter={(e) => {
+                            if (!isSelectedForChat) {
+                              e.currentTarget.style.backgroundColor = '#7B1FA2'
+                              e.currentTarget.style.transform = 'scale(1.05)'
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isSelectedForChat) {
+                              e.currentTarget.style.backgroundColor = '#892CDC'
+                              e.currentTarget.style.transform = 'scale(1)'
+                            }
+                          }}
+                        >
+                          {isSelectedForChat ? 'Close Help' : 'Get Help'}
+                        </button>
                       </div>
 
                       {/* Question Text */}
@@ -450,11 +520,25 @@ export default function QuizModePage() {
             </div>
           </div>
         )}
+
+        {/* Quiz Chat - Always show in review modal */}
+        {quizData && showReviewModal && (
+          <QuizChat
+            question={selectedQuestionForChat !== null ? quizData.questions[selectedQuestionForChat] : null}
+            questionIndex={selectedQuestionForChat}
+            userAnswer={selectedQuestionForChat !== null ? userAnswers[selectedQuestionForChat] : null}
+            topicName={null}
+            explanation={null}
+            allQuestions={quizData.questions}
+            quizName={quizData.quizName}
+          />
+        )}
       </div>
     )
   }
 
   return (
+    <>
     <div className="min-h-screen bg-white">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-200">
@@ -615,5 +699,6 @@ export default function QuizModePage() {
         </div>
       </div>
     </div>
+    </>
   )
 }
