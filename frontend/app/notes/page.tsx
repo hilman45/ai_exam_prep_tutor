@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { notesService, Summary } from '../../lib/notesService'
 import { folderService, Folder } from '../../lib/folderService'
 import DashboardLayout from '../../components/DashboardLayout'
+import NotesChat from '../../components/NotesChat'
 
 interface GeneratedNotesData {
   fileId: string
@@ -302,6 +303,9 @@ export default function NotesPage() {
           </div>
         </div>
       </div>
+      
+      {/* Chat Assistant - only show when notes are loaded */}
+      {notesData && <NotesChat notes={editedContent || notesData.summaryText} />}
     </DashboardLayout>
   )
 }
