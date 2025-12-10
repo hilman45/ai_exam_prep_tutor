@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { flashcardService, FlashcardCardState } from '@/lib/flashcardService'
+import FlashcardChat from '@/components/FlashcardChat'
 
 interface Flashcard {
   front: string
@@ -596,6 +597,17 @@ export default function FlashcardStudyPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Flashcard Chat - Always available */}
+      {studyData && !isDone && dueCards.length > 0 && (
+        <FlashcardChat
+          flashcard={currentCard}
+          flashcardIndex={currentCardIndex}
+          topicName={null}
+          allFlashcards={allCards}
+          flashcardSetName={studyData.flashcardName}
+        />
       )}
     </div>
   )

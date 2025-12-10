@@ -33,6 +33,18 @@ export interface QuizChatRequest {
   quiz_name?: string | null
 }
 
+export interface FlashcardChatRequest {
+  message: string
+  front?: string | null
+  back?: string | null
+  topic_name?: string | null
+  all_flashcards?: Array<{
+    front: string
+    back: string
+  }> | null
+  flashcard_set_name?: string | null
+}
+
 class ChatService {
   private async getAuthHeaders(): Promise<HeadersInit> {
     // Get the current session from Supabase
@@ -112,6 +124,45 @@ class ChatService {
       return data.reply
     } catch (error) {
       console.error('Error sending quiz chat message:', error)
+      throw error
+    }
+  }
+
+  async sendFlashcardMessage(
+    message: string,
+    front?: string | null,
+    back?: string | null,
+    topicName?: string | null,
+    allFlashcards?: Array<{
+      front: string
+      back: string
+    }> | null,
+    flashcardSetName?: string | null
+  ): Promise<string> {
+    try {
+      const headers = await this.getAuthHeaders()
+      const response = await fetch(`${API_BASE_URL}/api/chat/flashcard`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          message,
+          front: front || null,
+          back: back || null,
+          topic_name: topicName || null,
+          all_flashcards: allFlashcards || null,
+          flashcard_set_name: flashcardSetName || null
+        } as FlashcardChatRequest),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }))
+        throw new Error(errorData.detail || `Failed to send message: ${response.statusText}`)
+      }
+
+      const data: ChatResponse = await response.json()
+      return data.reply
+    } catch (error) {
+      console.error('Error sending flashcard chat message:', error)
       throw error
     }
   }
