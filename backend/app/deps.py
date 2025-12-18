@@ -79,3 +79,43 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             detail="Authentication failed",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+async def get_admin_user(current_user: User = Depends(get_current_user)) -> User:
+    """
+    Dependency to check if the current user is an admin.
+    Raises 403 if user is not an admin.
+    """
+    token = current_user.token
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            # Check if user is admin in user_profiles table
+            response = await client.get(
+                f"{settings.SUPABASE_URL}/rest/v1/user_profiles?user_id=eq.{current_user.id}&select=is_admin",
+                headers={
+                    "apikey": settings.SUPABASE_SERVICE_KEY,
+                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}"
+                }
+            )
+            
+            if response.status_code == 200:
+                profile_data = response.json()
+                if profile_data and len(profile_data) > 0:
+                    is_admin = profile_data[0].get("is_admin", False)
+                    if is_admin:
+                        return current_user
+            
+            # User is not an admin
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin access required"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error checking admin status: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
