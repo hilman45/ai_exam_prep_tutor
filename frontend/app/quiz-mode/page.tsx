@@ -62,7 +62,21 @@ export default function QuizModePage() {
         }
 
         const parsedQuiz = JSON.parse(storedQuiz)
-        setQuizData(parsedQuiz)
+        
+        // Shuffle questions randomly each time (Fisher-Yates shuffle)
+        const shuffledQuestions = [...parsedQuiz.questions]
+        for (let i = shuffledQuestions.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1))
+          ;[shuffledQuestions[i], shuffledQuestions[j]] = [shuffledQuestions[j], shuffledQuestions[i]]
+        }
+        
+        // Update parsedQuiz with shuffled questions
+        const quizWithShuffledQuestions = {
+          ...parsedQuiz,
+          questions: shuffledQuestions
+        }
+        
+        setQuizData(quizWithShuffledQuestions)
         
         // Initialize user answers array
         const initialAnswers = new Array(parsedQuiz.questions.length).fill(null)
@@ -265,75 +279,168 @@ export default function QuizModePage() {
 
   // Show results screen if quiz is completed
   if (quizCompleted) {
+    const totalQuestions = results.correct + results.wrong
+    const accuracyPercentage = results.accuracy
+    
+    // Calculate donut chart values - matching flashcard completion visual size
+    const chartSize = 200
+    const radius = 70
+    const circumference = 2 * Math.PI * radius
+    const correctPercentage = totalQuestions > 0 ? (results.correct / totalQuestions) * 100 : 0
+    const wrongPercentage = totalQuestions > 0 ? (results.wrong / totalQuestions) * 100 : 0
+    const correctArcLength = (correctPercentage / 100) * circumference
+    const wrongArcLength = (wrongPercentage / 100) * circumference
+    const correctOffset = circumference - correctArcLength
+    const wrongOffset = circumference - wrongArcLength - correctArcLength
+    
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center p-6">
-        <div className="max-w-2xl w-full">
-          {/* Results Card */}
-          <div className="bg-white border border-gray-200 rounded-lg p-8 shadow-sm">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">Quiz Results</h2>
-            
-            {/* Results Stats */}
-            <div className="grid grid-cols-3 gap-4 mb-8">
-              {/* Correct Answers */}
-              <div className="text-center p-6 bg-green-50 border border-green-200 rounded-lg">
-                <div className="text-3xl font-bold text-green-600 mb-2">{results.correct}</div>
-                <div className="text-sm text-green-700 font-medium">Correct</div>
-              </div>
+      <div className="min-h-screen bg-white">
+        {/* Header */}
+        <div className="relative p-4 border-b border-gray-200">
+          <button
+            onClick={handleQuit}
+            className="absolute top-4 left-4 text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <div className="flex-1 text-center">
+            <h1 className="text-xl font-bold text-gray-900">Quiz Results</h1>
+          </div>
+          <div className="w-6"></div> {/* Spacer for centering */}
+        </div>
+
+        {/* Completion Screen */}
+        <div className="flex items-center justify-center min-h-[calc(100vh-200px)] p-6">
+          <div className="max-w-4xl w-full grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* Left Section - Text and Actions */}
+            <div className="flex flex-col justify-center">
+              <p className="text-sm font-medium mb-2" style={{ color: '#0f5bff' }}>
+                {totalQuestions} QUESTIONS ANSWERED
+              </p>
+              <h2 className="text-4xl font-bold text-gray-900 mb-4">Well Done!</h2>
+              <p className="text-gray-600 mb-8">
+                {results.accuracy >= 80 
+                  ? "Excellent work! You have a strong grasp of the material."
+                  : results.accuracy >= 60
+                  ? "Good effort! Keep practicing to improve your score."
+                  : "Keep studying! Review the material and try again."}
+              </p>
               
-              {/* Wrong Answers */}
-              <div className="text-center p-6 bg-red-50 border border-red-200 rounded-lg">
-                <div className="text-3xl font-bold text-red-600 mb-2">{results.wrong}</div>
-                <div className="text-sm text-red-700 font-medium">Wrong</div>
-              </div>
-              
-              {/* Accuracy */}
-              <div className="text-center p-6 bg-purple-50 border border-purple-200 rounded-lg">
-                <div className="text-3xl font-bold mb-2" style={{color: '#892CDC'}}>
-                  {results.accuracy.toFixed(1)}%
-                </div>
-                <div className="text-sm font-medium" style={{color: '#892CDC'}}>Accuracy</div>
+              {/* Action Buttons */}
+              <div className="flex flex-col gap-4">
+                <button
+                  onClick={() => setShowReviewModal(true)}
+                  className="px-6 py-3 rounded-lg font-medium transition-all duration-200 border-2 flex items-center justify-between"
+                  style={{
+                    borderColor: '#892CDC',
+                    backgroundColor: '#FFFFFF',
+                    color: '#892CDC'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#892CDC'
+                    e.currentTarget.style.color = '#FFFFFF'
+                    e.currentTarget.style.transform = 'scale(1.02)'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#FFFFFF'
+                    e.currentTarget.style.color = '#892CDC'
+                    e.currentTarget.style.transform = 'scale(1)'
+                  }}
+                >
+                  <span className="flex items-center gap-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                    Review Answers
+                  </span>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                
+                <button
+                  onClick={handleQuit}
+                  className="px-6 py-3 rounded-lg font-medium transition-all duration-200 border-2"
+                  style={{
+                    borderColor: '#E2E8F0',
+                    backgroundColor: '#F3F3F3',
+                    color: '#191A23'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#E2E8F0'
+                    e.currentTarget.style.transform = 'scale(1.02)'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#F3F3F3'
+                    e.currentTarget.style.transform = 'scale(1)'
+                  }}
+                >
+                  Exit
+                </button>
               </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex gap-4 justify-center">
-              <button
-                onClick={() => setShowReviewModal(true)}
-                className="px-6 py-3 rounded-lg font-medium transition-all duration-200 border-2"
-                style={{
-                  borderColor: '#892CDC',
-                  backgroundColor: '#F3F3F3',
-                  color: '#892CDC'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#892CDC'
-                  e.currentTarget.style.color = '#FFFFFF'
-                  e.currentTarget.style.transform = 'scale(1.05)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = '#F3F3F3'
-                  e.currentTarget.style.color = '#892CDC'
-                  e.currentTarget.style.transform = 'scale(1)'
-                }}
-              >
-                Review Answers
-              </button>
-              
-              <button
-                onClick={handleQuit}
-                className="px-6 py-3 rounded-lg font-medium text-white transition-all duration-200"
-                style={{backgroundColor: '#892CDC'}}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#7B1FA2'
-                  e.currentTarget.style.transform = 'scale(1.05)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = '#892CDC'
-                  e.currentTarget.style.transform = 'scale(1)'
-                }}
-              >
-                Quit
-              </button>
+            {/* Right Section - Donut Chart */}
+            <div className="flex flex-col justify-center">
+              <div className="bg-white border border-gray-200 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-6 text-center">Your Score</h3>
+                
+                {/* Donut Chart */}
+                <div className="flex items-center justify-center">
+                  <div className="relative" style={{ width: `${chartSize}px`, height: `${chartSize}px` }}>
+                    <svg width={chartSize} height={chartSize} className="transform -rotate-90">
+                      {/* Background circle */}
+                      <circle
+                        cx={chartSize / 2}
+                        cy={chartSize / 2}
+                        r={radius}
+                        fill="none"
+                        stroke="#E5E7EB"
+                        strokeWidth="16"
+                      />
+                      {/* Correct answers (green) */}
+                      <circle
+                        cx={chartSize / 2}
+                        cy={chartSize / 2}
+                        r={radius}
+                        fill="none"
+                        stroke="#22c55e"
+                        strokeWidth="16"
+                        strokeDasharray={`${correctArcLength} ${circumference}`}
+                        strokeDashoffset="0"
+                        strokeLinecap="round"
+                        className="transition-all duration-500"
+                      />
+                      {/* Wrong answers (red) - only if there are wrong answers */}
+                      {results.wrong > 0 && (
+                        <circle
+                          cx={chartSize / 2}
+                          cy={chartSize / 2}
+                          r={radius}
+                          fill="none"
+                          stroke="#ef4444"
+                          strokeWidth="16"
+                          strokeDasharray={`${wrongArcLength} ${circumference}`}
+                          strokeDashoffset={-correctArcLength}
+                          strokeLinecap="round"
+                          className="transition-all duration-500"
+                        />
+                      )}
+                    </svg>
+                    {/* Percentage text in center */}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="text-center">
+                        <div className="text-3xl font-bold text-gray-900">
+                          {accuracyPercentage.toFixed(0)}%
+                        </div>
+                        <div className="text-xs text-gray-600 mt-1">Accuracy</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -541,11 +648,11 @@ export default function QuizModePage() {
     <>
     <div className="min-h-screen bg-white">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200">
-        {/* Close Button */}
+      <div className="relative p-4">
+        {/* Close Button - Absolute positioned */}
         <button
           onClick={handleClose}
-          className="text-gray-400 hover:text-gray-600 transition-colors"
+          className="absolute top-4 left-4 text-gray-400 hover:text-gray-600 transition-colors"
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -553,7 +660,7 @@ export default function QuizModePage() {
         </button>
 
         {/* Progress Bar */}
-        <div className="flex-1 mx-4">
+        <div className="max-w-md mx-auto mb-2">
           <div className="w-full bg-gray-200 rounded-full h-2">
             <div 
               className="bg-green-500 h-2 rounded-full transition-all duration-300"
@@ -562,9 +669,11 @@ export default function QuizModePage() {
           </div>
         </div>
 
-        {/* Question Count */}
-        <div className="text-sm font-medium text-gray-600">
-          {currentQuestionIndex + 1}/{quizData.questions.length}
+        {/* Progress Counter - Centered */}
+        <div className="text-center">
+          <span className="text-sm font-medium text-gray-700">
+            {currentQuestionIndex + 1} / {quizData.questions.length}
+          </span>
         </div>
       </div>
 
