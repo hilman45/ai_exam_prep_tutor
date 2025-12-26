@@ -26,6 +26,12 @@ export default function DashboardPage() {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
   const [studyStreak, setStudyStreak] = useState<StudyStreak | null>(null)
   const [streakLoading, setStreakLoading] = useState(true)
+  const [renameModalOpen, setRenameModalOpen] = useState(false)
+  const [folderToRename, setFolderToRename] = useState<Folder | null>(null)
+  const [newFolderName, setNewFolderName] = useState('')
+  const [deleteConfirm, setDeleteConfirm] = useState<{ folder: Folder | null }>({ folder: null })
+  const [deleting, setDeleting] = useState(false)
+  const [renaming, setRenaming] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -138,6 +144,90 @@ export default function DashboardPage() {
   const handleCloseModal = () => {
     setFolderName('')
     setAddFolderModalOpen(false)
+  }
+
+  const handleRenameFolder = (folder: Folder) => {
+    setFolderToRename(folder)
+    setNewFolderName(folder.name)
+    setRenameModalOpen(true)
+    setFolderMenuOpen(null)
+  }
+
+  const handleCloseRenameModal = () => {
+    setRenameModalOpen(false)
+    setFolderToRename(null)
+    setNewFolderName('')
+  }
+
+  const confirmRename = async () => {
+    if (!folderToRename || !newFolderName.trim()) return
+
+    try {
+      setRenaming(true)
+      const updatedFolder = await folderService.updateFolder(folderToRename.id, {
+        name: newFolderName.trim()
+      })
+      
+      // Update the folder in the list
+      const updatedFolders = folders.map(f => 
+        f.id === folderToRename.id ? { ...f, name: updatedFolder.name } : f
+      )
+      setFolders(updatedFolders)
+      saveFoldersToCache(updatedFolders)
+      
+      handleCloseRenameModal()
+    } catch (error) {
+      console.error('Error renaming folder:', error)
+      // You could add a toast notification here
+    } finally {
+      setRenaming(false)
+    }
+  }
+
+  const handleDeleteFolder = (folder: Folder) => {
+    setDeleteConfirm({ folder })
+    setFolderMenuOpen(null)
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm.folder) return
+
+    try {
+      setDeleting(true)
+      await folderService.deleteFolder(deleteConfirm.folder.id)
+      
+      // Remove the folder from the list
+      const updatedFolders = folders.filter(f => f.id !== deleteConfirm.folder!.id)
+      setFolders(updatedFolders)
+      saveFoldersToCache(updatedFolders)
+      
+      // Clear cache for the deleted folder's materials
+      if (typeof window !== 'undefined') {
+        const folderId = deleteConfirm.folder.id
+        localStorage.removeItem(`folder_summaries_${folderId}`)
+        localStorage.removeItem(`folder_summaries_${folderId}_timestamp`)
+        localStorage.removeItem(`folder_quizzes_${folderId}`)
+        localStorage.removeItem(`folder_quizzes_${folderId}_timestamp`)
+        localStorage.removeItem(`folder_flashcards_${folderId}`)
+        localStorage.removeItem(`folder_flashcards_${folderId}_timestamp`)
+      }
+      
+      // If we're viewing the deleted folder, redirect to dashboard
+      if (selectedFolderId === deleteConfirm.folder.id) {
+        setSelectedFolderId(null)
+      }
+      
+      setDeleteConfirm({ folder: null })
+    } catch (error) {
+      console.error('Error deleting folder:', error)
+      // You could add a toast notification here
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const cancelDelete = () => {
+    setDeleteConfirm({ folder: null })
   }
 
   const loadStudyStreak = async () => {
@@ -306,9 +396,9 @@ export default function DashboardPage() {
                   {folders.map((folder) => (
                     <div 
                       key={folder.id}
-                      className={`border border-slate-200 rounded-lg p-4 hover:brightness-95 hover:shadow-sm transition-all max-w-md relative cursor-pointer ${
+                      className={`border border-slate-200 rounded-lg p-4 hover:brightness-95 hover:shadow-sm transition-all max-w-md relative cursor-pointer overflow-visible ${
                         selectedFolderId === folder.id ? 'ring-2 ring-primary' : ''
-                      }`}
+                      } ${folderMenuOpen === folder.id ? 'z-[9999]' : ''}`}
                       style={{backgroundColor: folder.color}}
                       onClick={() => router.push(`/folders/${folder.id}?name=${encodeURIComponent(folder.name)}`)}
                     >
@@ -332,7 +422,7 @@ export default function DashboardPage() {
                         </div>
                         
                         {/* Kebab Menu */}
-                        <div className="relative">
+                        <div className="relative z-[10000]">
                           <button 
                             className="folder-menu-button p-1 rounded hover:bg-gray-100 transition-colors"
                             onClick={(e) => {
@@ -347,21 +437,21 @@ export default function DashboardPage() {
                           
                           {/* Folder Menu Dropdown */}
                           {folderMenuOpen === folder.id && (
-                            <div className="folder-menu absolute right-0 mt-1 w-32 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                            <div className="folder-menu absolute right-0 mt-1 w-32 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-[10000]">
                               <button 
                                 className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  // TODO: Implement rename functionality
+                                  handleRenameFolder(folder)
                                 }}
                               >
                                 Rename
                               </button>
                               <button 
-                                className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                                className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  // TODO: Implement delete functionality
+                                  handleDeleteFolder(folder)
                                 }}
                               >
                                 Delete
@@ -431,6 +521,142 @@ export default function DashboardPage() {
                 className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Add
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rename Folder Modal */}
+      {renameModalOpen && folderToRename && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-bold text-gray-900">Rename Folder</h2>
+              <button
+                onClick={handleCloseRenameModal}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                disabled={renaming}
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="mb-6">
+              <label htmlFor="newFolderName" className="block text-sm font-medium text-gray-700 mb-2">
+                Folder Name
+              </label>
+              <input
+                type="text"
+                id="newFolderName"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                placeholder="Enter folder name"
+                autoFocus
+                disabled={renaming}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !renaming && newFolderName.trim()) {
+                    confirmRename()
+                  } else if (e.key === 'Escape' && !renaming) {
+                    handleCloseRenameModal()
+                  }
+                }}
+              />
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={handleCloseRenameModal}
+                disabled={renaming}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmRename}
+                disabled={!newFolderName.trim() || renaming}
+                className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {renaming ? 'Renaming...' : 'Rename'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Folder Confirmation Modal */}
+      {deleteConfirm.folder && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-800">
+                Delete Folder?
+              </h3>
+              <button
+                onClick={cancelDelete}
+                disabled={deleting}
+                className="text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="mb-6">
+              <p className="text-gray-700 mb-3">
+                Are you sure you want to delete <span className="font-semibold">"{deleteConfirm.folder.name}"</span>?
+              </p>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <p className="text-sm text-red-800">
+                  <span className="font-semibold">Warning:</span> Deleting this folder will also delete all files and materials inside it, including:
+                </p>
+                <ul className="list-disc list-inside mt-2 text-sm text-red-700 space-y-1">
+                  <li>Uploaded files ({deleteConfirm.folder.materials.files || 0})</li>
+                  <li>Generated summaries ({deleteConfirm.folder.materials.summaries || 0})</li>
+                  <li>Generated quizzes ({deleteConfirm.folder.materials.quizzes || 0})</li>
+                  <li>Generated flashcards ({deleteConfirm.folder.materials.flashcards || 0})</li>
+                </ul>
+                <p className="text-sm text-red-800 mt-3 font-medium">
+                  This action cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={cancelDelete}
+                disabled={deleting}
+                className="px-4 py-2 rounded-lg font-medium transition-colors border-2 border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={deleting}
+                className="px-4 py-2 rounded-lg font-medium transition-colors text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{backgroundColor: '#EF4444'}}
+                onMouseEnter={(e) => {
+                  if (!deleting) {
+                    e.currentTarget.style.backgroundColor = '#DC2626'
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!deleting) {
+                    e.currentTarget.style.backgroundColor = '#EF4444'
+                  }
+                }}
+              >
+                {deleting ? 'Deleting...' : 'Delete Folder'}
               </button>
             </div>
           </div>

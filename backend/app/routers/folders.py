@@ -251,7 +251,7 @@ async def delete_folder(
     """Delete a folder and move its materials to the default folder"""
     try:
         # First, get the user's default folder (Untitled)
-        default_folder = await get_default_folder(current_user["id"])
+        default_folder = await get_default_folder(current_user.id)
         if not default_folder:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
