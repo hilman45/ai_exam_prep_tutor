@@ -40,6 +40,10 @@ export default function FlashcardStudyPage() {
   const [isDone, setIsDone] = useState(false) // True when no cards are due
   const [studyAllCards, setStudyAllCards] = useState(false) // If true, show all cards regardless of due time
   const [showModal, setShowModal] = useState(false) // Modal visibility for info button
+  const [normalStudyMode, setNormalStudyMode] = useState(false) // If true, use normal study mode (no spaced repetition)
+  const [normalStudyCards, setNormalStudyCards] = useState<DueCard[]>([]) // Cards for normal study mode (fixed sequence)
+  const [sessionStats, setSessionStats] = useState({ again: 0, good: 0, easy: 0 }) // Track session statistics
+  const [showCompletionScreen, setShowCompletionScreen] = useState(false) // Show completion screen after session
   const cardStartTime = useRef<number>(Date.now())
   const router = useRouter()
 
@@ -119,6 +123,11 @@ export default function FlashcardStudyPage() {
       
       if (due.length === 0) {
         setIsDone(true)
+        // Only show completion screen if we've reviewed at least one card
+        const totalReviewed = sessionStats.again + sessionStats.good + sessionStats.easy
+        if (totalReviewed > 0) {
+          setShowCompletionScreen(true)
+        }
       } else {
         setIsDone(false)
         setCurrentCardIndex(0)
@@ -188,8 +197,25 @@ export default function FlashcardStudyPage() {
         setStudyData(parsedData)
         setAllCards(cards)
         
-        // Load card states and filter due cards
-        await loadCardStatesAndFilter(parsedData.flashcardId, cards, studyAllCards)
+        // Initialize normal study cards (shuffled once on load)
+        const shuffledCards: DueCard[] = cards.map((card, idx) => ({
+          card,
+          originalIndex: idx,
+          shuffledIndex: idx
+        }))
+        // Shuffle for normal study mode
+        for (let i = shuffledCards.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1))
+          ;[shuffledCards[i], shuffledCards[j]] = [shuffledCards[j], shuffledCards[i]]
+          shuffledCards[i].shuffledIndex = i
+          shuffledCards[j].shuffledIndex = j
+        }
+        setNormalStudyCards(shuffledCards)
+        
+        // Load card states and filter due cards (only if not in normal study mode)
+        if (!normalStudyMode) {
+          await loadCardStatesAndFilter(parsedData.flashcardId, cards, studyAllCards)
+        }
       } catch (error) {
         console.error('Error loading flashcard study data:', error)
         setError('Failed to load flashcard data. Please try again.')
@@ -202,7 +228,11 @@ export default function FlashcardStudyPage() {
   }, [])
 
   const handleCardClick = () => {
-    if (!isFlipped) {
+    // In normal study mode, allow flipping back and forth
+    // In spaced repetition mode, only allow flipping once (from front to back)
+    if (normalStudyMode) {
+      setIsFlipped(!isFlipped)
+    } else if (!isFlipped) {
       setIsFlipped(true)
     }
   }
@@ -218,6 +248,12 @@ export default function FlashcardStudyPage() {
     // Get the original card index from current due card
     const currentDueCard = dueCards[currentCardIndex]
     const originalCardIndex = currentDueCard.originalIndex
+
+    // Update session statistics
+    setSessionStats(prev => ({
+      ...prev,
+      [rating]: prev[rating] + 1
+    }))
 
     // Record the review (silently fail if error - don't interrupt study flow)
     try {
@@ -244,6 +280,7 @@ export default function FlashcardStudyPage() {
       
       if (updatedDueCards.length === 0) {
         setIsDone(true)
+        setShowCompletionScreen(true)
       } else {
         // Adjust index if needed
         const newIndex = currentCardIndex < updatedDueCards.length ? currentCardIndex : 0
@@ -251,6 +288,43 @@ export default function FlashcardStudyPage() {
         setIsFlipped(false)
         cardStartTime.current = Date.now()
       }
+    }
+  }
+
+  const handleToggleNormalStudyMode = () => {
+    const newMode = !normalStudyMode
+    setNormalStudyMode(newMode)
+    setShowCompletionScreen(false) // Hide completion screen when switching modes
+    
+    if (newMode) {
+      // Switching to normal study mode
+      // Reset to first card
+      setCurrentCardIndex(0)
+      setIsFlipped(false)
+      setIsDone(false)
+    } else {
+      // Switching back to spaced repetition mode
+      // Reset session stats when switching back
+      setSessionStats({ again: 0, good: 0, easy: 0 })
+      // Reload card states and filter due cards
+      if (studyData) {
+        loadCardStatesAndFilter(studyData.flashcardId, allCards, studyAllCards)
+      }
+    }
+  }
+
+  const handlePrevious = () => {
+    if (currentCardIndex > 0) {
+      setCurrentCardIndex(currentCardIndex - 1)
+      setIsFlipped(false)
+    }
+  }
+
+  const handleNext = () => {
+    const cards = normalStudyMode ? normalStudyCards : dueCards
+    if (currentCardIndex < cards.length - 1) {
+      setCurrentCardIndex(currentCardIndex + 1)
+      setIsFlipped(false)
     }
   }
 
@@ -320,15 +394,172 @@ export default function FlashcardStudyPage() {
     )
   }
 
-  // Show "You're done for now" message if no cards are due
-  if (isDone || dueCards.length === 0) {
+  // Show completion screen if session is finished and we have stats
+  if (!normalStudyMode && showCompletionScreen && (isDone || dueCards.length === 0)) {
+    const totalReviewed = sessionStats.again + sessionStats.good + sessionStats.easy
+    const maxCount = Math.max(sessionStats.again, sessionStats.good, sessionStats.easy, 1)
+    
     return (
       <div className="min-h-screen bg-white">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+        <div className="relative p-4 border-b border-gray-200">
           <button
             onClick={handleClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="absolute top-4 left-4 text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <div className="flex-1 text-center">
+            <h1 className="text-xl font-bold text-gray-900">{studyData?.flashcardName}</h1>
+          </div>
+          <div className="w-6"></div> {/* Spacer for centering */}
+        </div>
+
+        {/* Completion Screen */}
+        <div className="flex items-center justify-center min-h-[calc(100vh-200px)] p-6">
+          <div className="max-w-4xl w-full grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* Left Section - Text and Actions */}
+            <div className="flex flex-col justify-center">
+              <p className="text-sm font-medium mb-2" style={{ color: '#0f5bff' }}>
+                {totalReviewed} QUESTIONS PRACTICED
+              </p>
+              <h2 className="text-4xl font-bold text-gray-900 mb-4">Well Done!</h2>
+              <p className="text-gray-600 mb-8">
+                Strong grasp of the material! A few more practice sessions will perfect your knowledge.
+              </p>
+              
+              {/* Action Buttons */}
+              <div className="flex flex-col gap-4">
+                <button
+                  onClick={() => {
+                    setShowCompletionScreen(false)
+                    setNormalStudyMode(true)
+                    setIsDone(false)
+                    setCurrentCardIndex(0)
+                    setIsFlipped(false)
+                  }}
+                  className="px-6 py-3 rounded-lg font-medium transition-all duration-200 border-2 flex items-center justify-between"
+                  style={{
+                    borderColor: '#892CDC',
+                    backgroundColor: '#FFFFFF',
+                    color: '#892CDC'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#892CDC'
+                    e.currentTarget.style.color = '#FFFFFF'
+                    e.currentTarget.style.transform = 'scale(1.02)'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#FFFFFF'
+                    e.currentTarget.style.color = '#892CDC'
+                    e.currentTarget.style.transform = 'scale(1)'
+                  }}
+                >
+                  <span className="flex items-center gap-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Study Normally
+                  </span>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                
+                <button
+                  onClick={handleClose}
+                  className="px-6 py-3 rounded-lg font-medium transition-all duration-200 border-2"
+                  style={{
+                    borderColor: '#E2E8F0',
+                    backgroundColor: '#F3F3F3',
+                    color: '#191A23'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#E2E8F0'
+                    e.currentTarget.style.transform = 'scale(1.02)'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#F3F3F3'
+                    e.currentTarget.style.transform = 'scale(1)'
+                  }}
+                >
+                  Exit
+                </button>
+              </div>
+            </div>
+
+            {/* Right Section - Bar Chart */}
+            <div className="flex flex-col justify-center">
+              <div className="bg-white border border-gray-200 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-6 text-center">Session Performance</h3>
+                <div className="flex items-end justify-center gap-6 h-64">
+                  {/* Easy Bar - Green */}
+                  <div className="flex flex-col items-center">
+                    <div className="text-lg font-bold mb-2" style={{ color: '#22c55e' }}>
+                      {sessionStats.easy}
+                    </div>
+                    <div
+                      className="w-16 rounded-t transition-all duration-500"
+                      style={{
+                        height: `${(sessionStats.easy / maxCount) * 200}px`,
+                        backgroundColor: '#22c55e',
+                        minHeight: sessionStats.easy > 0 ? '20px' : '0px'
+                      }}
+                    ></div>
+                    <div className="mt-2 text-sm font-medium text-gray-700">Easy</div>
+                  </div>
+
+                  {/* Good Bar - Yellow */}
+                  <div className="flex flex-col items-center">
+                    <div className="text-lg font-bold mb-2" style={{ color: '#eab308' }}>
+                      {sessionStats.good}
+                    </div>
+                    <div
+                      className="w-16 rounded-t transition-all duration-500"
+                      style={{
+                        height: `${(sessionStats.good / maxCount) * 200}px`,
+                        backgroundColor: '#eab308',
+                        minHeight: sessionStats.good > 0 ? '20px' : '0px'
+                      }}
+                    ></div>
+                    <div className="mt-2 text-sm font-medium text-gray-700">Good</div>
+                  </div>
+
+                  {/* Again (Hard) Bar - Red */}
+                  <div className="flex flex-col items-center">
+                    <div className="text-lg font-bold mb-2" style={{ color: '#ef4444' }}>
+                      {sessionStats.again}
+                    </div>
+                    <div
+                      className="w-16 rounded-t transition-all duration-500"
+                      style={{
+                        height: `${(sessionStats.again / maxCount) * 200}px`,
+                        backgroundColor: '#ef4444',
+                        minHeight: sessionStats.again > 0 ? '20px' : '0px'
+                      }}
+                    ></div>
+                    <div className="mt-2 text-sm font-medium text-gray-700">Hard</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Show "You're done for now" message if no cards are due (only in spaced repetition mode, but no stats yet)
+  if (!normalStudyMode && !showCompletionScreen && (isDone || dueCards.length === 0)) {
+    return (
+      <div className="min-h-screen bg-white">
+        {/* Header */}
+        <div className="relative p-4 border-b border-gray-200">
+          <button
+            onClick={handleClose}
+            className="absolute top-4 left-4 text-gray-400 hover:text-gray-600 transition-colors"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -337,7 +568,32 @@ export default function FlashcardStudyPage() {
           <div className="flex-1 text-center">
             <h1 className="text-xl font-bold text-gray-900">{studyData.flashcardName}</h1>
           </div>
-          <div className="w-6"></div> {/* Spacer for centering */}
+          {/* Study Normally Button - Top Right */}
+          <button
+            onClick={handleToggleNormalStudyMode}
+            className="absolute top-4 right-4 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 border-2"
+            style={{
+              borderColor: normalStudyMode ? '#892CDC' : '#E2E8F0',
+              backgroundColor: normalStudyMode ? '#892CDC' : '#FFFFFF',
+              color: normalStudyMode ? '#FFFFFF' : '#892CDC'
+            }}
+            onMouseEnter={(e) => {
+              if (!normalStudyMode) {
+                e.currentTarget.style.backgroundColor = '#892CDC'
+                e.currentTarget.style.color = '#FFFFFF'
+                e.currentTarget.style.transform = 'scale(1.05)'
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!normalStudyMode) {
+                e.currentTarget.style.backgroundColor = '#FFFFFF'
+                e.currentTarget.style.color = '#892CDC'
+                e.currentTarget.style.transform = 'scale(1)'
+              }
+            }}
+          >
+            {normalStudyMode ? 'Spaced Repetition' : 'Study Normally'}
+          </button>
         </div>
 
         {/* Done Message */}
@@ -379,8 +635,27 @@ export default function FlashcardStudyPage() {
     )
   }
 
-  const currentDueCard = dueCards[currentCardIndex]
-  const currentCard = currentDueCard.card
+  // Get current card based on mode
+  const cards = normalStudyMode ? normalStudyCards : dueCards
+  const currentDueCard = cards[currentCardIndex]
+  const currentCard = currentDueCard?.card
+
+  // Safety check
+  if (!currentCard) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600">No cards available</p>
+          <button
+            onClick={handleClose}
+            className="mt-4 px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors"
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-white">
@@ -396,9 +671,39 @@ export default function FlashcardStudyPage() {
           </svg>
         </button>
 
+        {/* Study Normally Button - Top Right */}
+        <button
+          onClick={handleToggleNormalStudyMode}
+          className="absolute top-4 right-4 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 border-2"
+          style={{
+            borderColor: normalStudyMode ? '#892CDC' : '#E2E8F0',
+            backgroundColor: normalStudyMode ? '#892CDC' : '#FFFFFF',
+            color: normalStudyMode ? '#FFFFFF' : '#892CDC'
+          }}
+          onMouseEnter={(e) => {
+            if (!normalStudyMode) {
+              e.currentTarget.style.backgroundColor = '#892CDC'
+              e.currentTarget.style.color = '#FFFFFF'
+              e.currentTarget.style.transform = 'scale(1.05)'
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!normalStudyMode) {
+              e.currentTarget.style.backgroundColor = '#FFFFFF'
+              e.currentTarget.style.color = '#892CDC'
+              e.currentTarget.style.transform = 'scale(1)'
+            }
+          }}
+        >
+          {normalStudyMode ? 'Spaced Repetition' : 'Study Normally'}
+        </button>
+
         {/* Title - Centered */}
         <div className="text-center mb-4">
           <h1 className="text-xl font-bold text-gray-900">{studyData.flashcardName}</h1>
+          {normalStudyMode && (
+            <p className="text-sm text-gray-500 mt-1">Normal Study Mode</p>
+          )}
         </div>
 
         {/* Progress Bar */}
@@ -406,7 +711,7 @@ export default function FlashcardStudyPage() {
           <div className="w-full bg-gray-200 rounded-full h-2">
             <div 
               className="bg-green-500 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${((currentCardIndex + 1) / dueCards.length) * 100}%` }}
+              style={{ width: `${((currentCardIndex + 1) / cards.length) * 100}%` }}
             ></div>
           </div>
         </div>
@@ -414,7 +719,7 @@ export default function FlashcardStudyPage() {
         {/* Progress Counter - Centered (Countup) */}
         <div className="text-center">
           <span className="text-sm font-medium text-gray-700">
-            {currentCardIndex + 1} / {dueCards.length}
+            {currentCardIndex + 1} / {cards.length}
           </span>
         </div>
       </div>
@@ -462,67 +767,159 @@ export default function FlashcardStudyPage() {
         </div>
       </div>
 
-      {/* Footer - Action Buttons - Only show after flip */}
-      {isFlipped && (
+      {/* Footer - Action Buttons */}
+      {/* Normal Study Mode - Always show navigation buttons */}
+      {normalStudyMode && (
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4">
           <div className="max-w-2xl mx-auto">
-            {/* Buttons */}
-            <div className="flex items-center justify-center space-x-4 mb-4">
-              {/* Again Button */}
-              <div className="flex flex-col items-center">
-                <span className="text-xs text-gray-500 mb-1">&lt;1m</span>
-                <button
-                  onClick={() => handleRating('again')}
-                  className="px-14 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-red-500 transition-colors font-medium flex items-center gap-2"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                  Again
-                </button>
-              </div>
-
-              {/* Good Button */}
-              <div className="flex flex-col items-center">
-                <span className="text-xs text-gray-500 mb-1">10min</span>
-                <button
-                  onClick={() => handleRating('good')}
-                  className="px-14 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-yellow-500 transition-colors font-medium flex items-center gap-2"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                  </svg>
-                  Good
-                </button>
-              </div>
-
-              {/* Easy Button */}
-              <div className="flex flex-col items-center">
-                <span className="text-xs text-gray-500 mb-1">30min</span>
-                <button
-                  onClick={() => handleRating('easy')}
-                  className="px-14 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-green-500 transition-colors font-medium flex items-center gap-2"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Easy
-                </button>
-              </div>
-            </div>
-
-            {/* Info Button */}
-            <div className="flex justify-center">
+            <div className="flex items-center justify-between">
+              {/* Previous Button */}
               <button
-                onClick={handleInfoClick}
-                className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+                onClick={handlePrevious}
+                disabled={currentCardIndex === 0}
+                className={`px-6 py-3 border rounded-lg transition-colors font-medium flex items-center gap-2 ${
+                  currentCardIndex === 0
+                    ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                    : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                }`}
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
-                What do these buttons mean?
+                Previous
+              </button>
+
+              {/* Exit Button */}
+              <button
+                onClick={handleClose}
+                className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+              >
+                Exit
+              </button>
+
+              {/* Next Button */}
+              <button
+                onClick={handleNext}
+                disabled={currentCardIndex === cards.length - 1}
+                className={`px-6 py-3 border rounded-lg transition-colors font-medium flex items-center gap-2 ${
+                  currentCardIndex === cards.length - 1
+                    ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                    : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                Next
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Spaced Repetition Mode - Only show after flip */}
+      {!normalStudyMode && isFlipped && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4">
+          <div className="max-w-2xl mx-auto">
+            {/* Spaced Repetition Mode - Rating Buttons */}
+            <>
+                {/* Buttons */}
+                <div className="flex items-center justify-center space-x-4 mb-4">
+                  {/* Again Button */}
+                  <div className="flex flex-col items-center">
+                    <span className="text-xs text-gray-500 mb-1">&lt;1m</span>
+                    <button
+                      onClick={() => handleRating('again')}
+                      className="px-14 py-3 border border-gray-300 text-gray-700 rounded-lg transition-all duration-200 font-medium flex items-center gap-2"
+                      style={{
+                        backgroundColor: '#ffffff'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#fee2e2'
+                        e.currentTarget.style.borderColor = '#ef4444'
+                        e.currentTarget.style.color = '#dc2626'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = '#ffffff'
+                        e.currentTarget.style.borderColor = '#d1d5db'
+                        e.currentTarget.style.color = '#374151'
+                      }}
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      Again
+                    </button>
+                  </div>
+
+                  {/* Good Button */}
+                  <div className="flex flex-col items-center">
+                    <span className="text-xs text-gray-500 mb-1">10min</span>
+                    <button
+                      onClick={() => handleRating('good')}
+                      className="px-14 py-3 border border-gray-300 text-gray-700 rounded-lg transition-all duration-200 font-medium flex items-center gap-2"
+                      style={{
+                        backgroundColor: '#ffffff'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#fef9c3'
+                        e.currentTarget.style.borderColor = '#eab308'
+                        e.currentTarget.style.color = '#ca8a04'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = '#ffffff'
+                        e.currentTarget.style.borderColor = '#d1d5db'
+                        e.currentTarget.style.color = '#374151'
+                      }}
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                      Good
+                    </button>
+                  </div>
+
+                  {/* Easy Button */}
+                  <div className="flex flex-col items-center">
+                    <span className="text-xs text-gray-500 mb-1">30min</span>
+                    <button
+                      onClick={() => handleRating('easy')}
+                      className="px-14 py-3 border border-gray-300 text-gray-700 rounded-lg transition-all duration-200 font-medium flex items-center gap-2"
+                      style={{
+                        backgroundColor: '#ffffff'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#dcfce7'
+                        e.currentTarget.style.borderColor = '#22c55e'
+                        e.currentTarget.style.color = '#16a34a'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = '#ffffff'
+                        e.currentTarget.style.borderColor = '#d1d5db'
+                        e.currentTarget.style.color = '#374151'
+                      }}
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Easy
+                    </button>
+                  </div>
+                </div>
+
+                {/* Info Button */}
+                <div className="flex justify-center">
+                  <button
+                    onClick={handleInfoClick}
+                    className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    What do these buttons mean?
+                  </button>
+                </div>
+            </>
           </div>
         </div>
       )}
@@ -600,7 +997,7 @@ export default function FlashcardStudyPage() {
       )}
 
       {/* Flashcard Chat - Always available */}
-      {studyData && !isDone && dueCards.length > 0 && (
+      {studyData && ((normalStudyMode && normalStudyCards.length > 0) || (!normalStudyMode && !isDone && dueCards.length > 0)) && (
         <FlashcardChat
           flashcard={currentCard}
           flashcardIndex={currentCardIndex}
