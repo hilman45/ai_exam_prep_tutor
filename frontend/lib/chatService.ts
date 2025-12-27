@@ -6,6 +6,11 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
+  questions?: Array<{
+    question: string
+    options: string[]
+    answer_index: number
+  }>
 }
 
 export interface ChatRequest {
@@ -43,6 +48,22 @@ export interface FlashcardChatRequest {
     back: string
   }> | null
   flashcard_set_name?: string | null
+}
+
+export interface QuizEditChatRequest {
+  message: string
+  current_questions?: Array<{
+    question: string
+    options: string[]
+    answer_index: number
+  }> | null
+  quiz_name?: string | null
+  filename?: string | null
+  selected_question?: {
+    question: string
+    options: string[]
+    answer_index: number
+  } | null
 }
 
 class ChatService {
@@ -163,6 +184,48 @@ class ChatService {
       return data.reply
     } catch (error) {
       console.error('Error sending flashcard chat message:', error)
+      throw error
+    }
+  }
+
+  async sendQuizEditMessage(
+    message: string,
+    currentQuestions?: Array<{
+      question: string
+      options: string[]
+      answer_index: number
+    }> | null,
+    quizName?: string | null,
+    filename?: string | null,
+    selectedQuestion?: {
+      question: string
+      options: string[]
+      answer_index: number
+    } | null
+  ): Promise<string> {
+    try {
+      const headers = await this.getAuthHeaders()
+      const response = await fetch(`${API_BASE_URL}/api/chat/quiz-edit`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          message,
+          current_questions: currentQuestions || null,
+          quiz_name: quizName || null,
+          filename: filename || null,
+          selected_question: selectedQuestion || null
+        } as QuizEditChatRequest),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }))
+        throw new Error(errorData.detail || `Failed to send message: ${response.statusText}`)
+      }
+
+      const data: ChatResponse = await response.json()
+      return data.reply
+    } catch (error) {
+      console.error('Error sending quiz edit chat message:', error)
       throw error
     }
   }

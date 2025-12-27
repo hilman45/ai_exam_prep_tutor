@@ -32,6 +32,13 @@ class FlashcardChatRequest(BaseModel):
     all_flashcards: list[dict] | None = None
     flashcard_set_name: str | None = None
 
+class QuizEditChatRequest(BaseModel):
+    message: str
+    current_questions: list[dict] | None = None
+    quiz_name: str | None = None
+    filename: str | None = None
+    selected_question: dict | None = None
+
 async def _chat_with_groq_api(message: str, notes: str) -> str:
     """Chat with notes context using Groq API."""
     try:
@@ -661,4 +668,185 @@ async def chat_with_flashcard(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate flashcard chat response: {str(e)}"
+        )
+
+async def _chat_quiz_edit_with_groq_api(
+    message: str,
+    current_questions: list[dict] | None = None,
+    quiz_name: str | None = None,
+    filename: str | None = None,
+    selected_question: dict | None = None
+) -> str:
+    """Chat for quiz editing using Groq API."""
+    try:
+        async with httpx.AsyncClient() as client:
+            system_prompt = """You are PrepWise, an AI assistant helping users improve and edit their quiz questions.
+
+Your role is to:
+- Generate new quiz questions based on user requests
+- Improve existing questions (make them clearer, more concise, harder, easier, etc.)
+- Create similar questions to existing ones
+- Add more questions to a quiz
+- Provide questions in JSON format when generating new questions
+
+IMPORTANT: If a FOCUS QUESTION is provided, the user wants to modify ONLY that specific question. 
+In this case, generate ONLY ONE question in the JSON array (not multiple questions).
+
+When the user asks you to generate questions, you MUST respond with a valid JSON array of questions in this exact format:
+[
+  {
+    "question": "Question text here?",
+    "options": ["Option A", "Option B", "Option C", "Option D"],
+    "answer_index": 0
+  }
+]
+
+The answer_index should be 0 for the first option, 1 for the second, etc.
+
+If the user is asking for general help or explanations (not generating questions), respond normally with text.
+
+Always be helpful, clear, and educational."""
+
+            # Build context from current questions
+            context_parts = []
+            if quiz_name:
+                context_parts.append(f"Quiz Name: {quiz_name}")
+            if filename:
+                context_parts.append(f"Source File: {filename}")
+            
+            # If a specific question is selected, focus on that
+            if selected_question:
+                context_parts.append("\n=== FOCUS QUESTION (User wants help with this specific question) ===")
+                context_parts.append(f"Question: {selected_question.get('question', '')}")
+                options = selected_question.get('options', [])
+                if options:
+                    context_parts.append(f"Options: {', '.join(options)}")
+                    answer_idx = selected_question.get('answer_index', 0)
+                    if answer_idx < len(options):
+                        context_parts.append(f"Correct Answer: {options[answer_idx]}")
+                context_parts.append("===\n")
+            
+            if current_questions and len(current_questions) > 0:
+                if selected_question:
+                    context_parts.append("\nAll quiz questions (for context):")
+                else:
+                    context_parts.append("\nCurrent quiz questions:")
+                for i, q in enumerate(current_questions[:5], 1):  # Limit to first 5 for context
+                    context_parts.append(f"\nQuestion {i}: {q.get('question', '')}")
+                    options = q.get('options', [])
+                    if options:
+                        context_parts.append(f"Options: {', '.join(options)}")
+                        answer_idx = q.get('answer_index', 0)
+                        if answer_idx < len(options):
+                            context_parts.append(f"Correct Answer: {options[answer_idx]}")
+            
+            context = "\n".join(context_parts) if context_parts else "No current questions provided."
+
+            user_prompt = f"""Context:
+{context}
+
+User's request: {message}
+
+Please help the user with their quiz editing request. If they're asking for new questions, provide them in the JSON format specified."""
+
+            response = await client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": settings.GROQ_MODEL,
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": system_prompt
+                        },
+                        {
+                            "role": "user",
+                            "content": user_prompt
+                        }
+                    ],
+                    "max_tokens": 2000,
+                    "temperature": 0.7,
+                    "top_p": 0.9
+                },
+                timeout=60.0
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                if "choices" in result and len(result["choices"]) > 0:
+                    reply = result["choices"][0]["message"]["content"].strip()
+                    print(f"SUCCESS: Groq quiz edit chat response generated")
+                    return reply
+                else:
+                    raise Exception("Groq API returned unexpected format")
+            else:
+                error_text = response.text
+                print(f"ERROR: Groq API error: {response.status_code} - {error_text}")
+                raise Exception(f"Groq API error: {response.status_code}")
+
+    except Exception as e:
+        print(f"ERROR: Groq API quiz edit chat error: {str(e)}")
+        raise
+
+async def call_quiz_edit_chat_model(
+    message: str,
+    current_questions: list[dict] | None = None,
+    quiz_name: str | None = None,
+    filename: str | None = None,
+    selected_question: dict | None = None
+) -> str:
+    """
+    Call AI model for quiz editing chat.
+    Tries Groq API first, then falls back to basic responses.
+    """
+    # Try Groq API first
+    try:
+        if settings.GROQ_API_KEY:
+            return await _chat_quiz_edit_with_groq_api(
+                message, current_questions, quiz_name, filename, selected_question
+            )
+    except Exception as groq_error:
+        print(f"Groq API failed: {groq_error}")
+    
+    # Fallback to basic response
+    return f"I understand you want to: {message}. However, the AI service is currently unavailable. Please try again later or use the manual question editor."
+
+@router.post("/quiz-edit", response_model=ChatResponse)
+async def chat_with_quiz_edit(
+    request: QuizEditChatRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Chat endpoint for quiz editing assistance.
+    Takes a user message and current quiz questions, returns AI response with potential new questions.
+    """
+    try:
+        # Validate inputs
+        if not request.message or not request.message.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Message cannot be empty"
+            )
+        
+        # Call AI model to generate response
+        reply = await call_quiz_edit_chat_model(
+            request.message,
+            request.current_questions,
+            request.quiz_name,
+            request.filename,
+            request.selected_question
+        )
+        
+        return ChatResponse(reply=reply)
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"ERROR: Quiz edit chat endpoint error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate quiz edit chat response: {str(e)}"
         )
