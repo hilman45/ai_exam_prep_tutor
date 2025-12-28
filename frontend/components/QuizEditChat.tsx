@@ -72,14 +72,9 @@ export default function QuizEditChat({
 
     try {
       // Call backend API for quiz editing assistance
-      // If a specific question is selected, include it in the context
-      const questionsToSend = selectedQuestion 
-        ? currentQuestions.filter((_, idx) => idx === selectedQuestionIndex)
-        : currentQuestions
-      
       const reply = await chatService.sendQuizEditMessage(
         currentInput,
-        questionsToSend,
+        currentQuestions,
         quizName || null,
         filename || null,
         selectedQuestion || null
@@ -89,21 +84,16 @@ export default function QuizEditChat({
       const questions = parseQuizQuestionsFromResponse(reply)
       
       if (questions && questions.length > 0) {
-        // If a specific question is selected, only use the first generated question
-        const questionsToShow = selectedQuestion && selectedQuestionIndex !== null
-          ? [questions[0]] // Only first question when replacing a specific question
-          : questions // All questions when no specific question is selected
-        
         // Add assistant response with questions
         const assistantMessage: ChatMessage = {
           role: 'assistant',
           content: reply,
-          questions: questionsToShow
+          questions: questions
         }
         setMessages(prev => [...prev, assistantMessage])
         
         // Automatically show preview
-        onQuestionsGenerated(questionsToShow)
+        onQuestionsGenerated(questions)
       } else {
         // Regular text response
         const assistantMessage: ChatMessage = {
@@ -151,14 +141,9 @@ export default function QuizEditChat({
 
     try {
       // Call backend API for quiz editing assistance
-      // If a specific question is selected, include it in the context
-      const questionsToSend = selectedQuestion 
-        ? currentQuestions.filter((_, idx) => idx === selectedQuestionIndex)
-        : currentQuestions
-      
       const reply = await chatService.sendQuizEditMessage(
         prompt,
-        questionsToSend,
+        currentQuestions,
         quizName || null,
         filename || null,
         selectedQuestion || null
@@ -168,21 +153,16 @@ export default function QuizEditChat({
       const questions = parseQuizQuestionsFromResponse(reply)
       
       if (questions && questions.length > 0) {
-        // If a specific question is selected, only use the first generated question
-        const questionsToShow = selectedQuestion && selectedQuestionIndex !== null
-          ? [questions[0]] // Only first question when replacing a specific question
-          : questions // All questions when no specific question is selected
-        
         // Add assistant response with questions
         const assistantMessage: ChatMessage = {
           role: 'assistant',
           content: reply,
-          questions: questionsToShow
+          questions: questions
         }
         setMessages(prev => [...prev, assistantMessage])
         
         // Automatically show preview
-        onQuestionsGenerated(questionsToShow)
+        onQuestionsGenerated(questions)
       } else {
         // Regular text response
         const assistantMessage: ChatMessage = {
@@ -284,11 +264,6 @@ export default function QuizEditChat({
             />
           </svg>
           <h3 className="font-semibold">AI Quiz Editor</h3>
-          {selectedQuestionIndex !== null && selectedQuestionIndex !== undefined && (
-            <span className="ml-2 px-2.5 py-1 bg-white bg-opacity-20 rounded-full text-xs font-bold border border-white border-opacity-30">
-              Question {selectedQuestionIndex + 1}
-            </span>
-          )}
         </div>
         <div className="flex items-center space-x-2">
           {messages.length > 0 && (
@@ -356,14 +331,10 @@ export default function QuizEditChat({
               />
             </svg>
             <p className="text-sm">
-              {selectedQuestion 
-                ? "Ask me to help improve this question!" 
-                : "Ask me to help improve your quiz questions!"}
+              Ask me to help improve your quiz questions!
             </p>
             <p className="text-xs text-gray-400 mt-2">
-              {selectedQuestion 
-                ? 'Try: "Make this clearer" or "Improve the options"'
-                : 'Try: "Create similar questions" or "Make them more concise"'}
+              Try: "Create similar questions" or "Make them more concise"
             </p>
           </div>
         ) : (

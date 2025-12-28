@@ -11,6 +11,10 @@ export interface ChatMessage {
     options: string[]
     answer_index: number
   }>
+  flashcards?: Array<{
+    front: string
+    back: string
+  }>
 }
 
 export interface ChatRequest {
@@ -63,6 +67,20 @@ export interface QuizEditChatRequest {
     question: string
     options: string[]
     answer_index: number
+  } | null
+}
+
+export interface FlashcardEditChatRequest {
+  message: string
+  current_flashcards?: Array<{
+    front: string
+    back: string
+  }> | null
+  flashcard_name?: string | null
+  filename?: string | null
+  selected_flashcard?: {
+    front: string
+    back: string
   } | null
 }
 
@@ -226,6 +244,46 @@ class ChatService {
       return data.reply
     } catch (error) {
       console.error('Error sending quiz edit chat message:', error)
+      throw error
+    }
+  }
+
+  async sendFlashcardEditMessage(
+    message: string,
+    currentFlashcards?: Array<{
+      front: string
+      back: string
+    }> | null,
+    flashcardName?: string | null,
+    filename?: string | null,
+    selectedFlashcard?: {
+      front: string
+      back: string
+    } | null
+  ): Promise<string> {
+    try {
+      const headers = await this.getAuthHeaders()
+      const response = await fetch(`${API_BASE_URL}/api/chat/flashcard-edit`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          message,
+          current_flashcards: currentFlashcards || null,
+          flashcard_name: flashcardName || null,
+          filename: filename || null,
+          selected_flashcard: selectedFlashcard || null
+        } as FlashcardEditChatRequest),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }))
+        throw new Error(errorData.detail || `Failed to send message: ${response.statusText}`)
+      }
+
+      const data: ChatResponse = await response.json()
+      return data.reply
+    } catch (error) {
+      console.error('Error sending flashcard edit chat message:', error)
       throw error
     }
   }

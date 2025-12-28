@@ -39,6 +39,13 @@ class QuizEditChatRequest(BaseModel):
     filename: str | None = None
     selected_question: dict | None = None
 
+class FlashcardEditChatRequest(BaseModel):
+    message: str
+    current_flashcards: list[dict] | None = None
+    flashcard_name: str | None = None
+    filename: str | None = None
+    selected_flashcard: dict | None = None
+
 async def _chat_with_groq_api(message: str, notes: str) -> str:
     """Chat with notes context using Groq API."""
     try:
@@ -849,4 +856,173 @@ async def chat_with_quiz_edit(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate quiz edit chat response: {str(e)}"
+        )
+
+async def _chat_flashcard_edit_with_groq_api(
+    message: str,
+    current_flashcards: list[dict] | None = None,
+    flashcard_name: str | None = None,
+    filename: str | None = None,
+    selected_flashcard: dict | None = None
+) -> str:
+    """Chat for flashcard editing using Groq API."""
+    try:
+        async with httpx.AsyncClient() as client:
+            system_prompt = """You are PrepWise, an AI assistant helping users improve and edit their flashcards.
+
+Your role is to:
+- Generate new flashcards based on user requests
+- Improve existing flashcards (make them clearer, more concise, harder, easier, etc.)
+- Create similar flashcards to existing ones
+- Add more flashcards to a set
+- Provide flashcards in JSON format when generating new flashcards
+
+IMPORTANT: If a FOCUS FLASHCARD is provided, the user wants to modify ONLY that specific flashcard. 
+In this case, generate ONLY ONE flashcard in the JSON array (not multiple flashcards).
+
+When the user asks you to generate flashcards, you MUST respond with a valid JSON array of flashcards in this exact format:
+[
+  {
+    "front": "Question or term here",
+    "back": "Answer or definition here"
+  }
+]
+
+If the user is asking for general help or explanations (not generating flashcards), respond normally with text.
+
+Always be helpful, clear, and educational."""
+
+            # Build context from current flashcards
+            context_parts = []
+            if flashcard_name:
+                context_parts.append(f"Flashcard Set Name: {flashcard_name}")
+            if filename:
+                context_parts.append(f"Source File: {filename}")
+            
+            # If a specific flashcard is selected, focus on that
+            if selected_flashcard:
+                context_parts.append("\n=== FOCUS FLASHCARD (User wants help with this specific flashcard) ===")
+                context_parts.append(f"Front: {selected_flashcard.get('front', '')}")
+                context_parts.append(f"Back: {selected_flashcard.get('back', '')}")
+                context_parts.append("===\n")
+            
+            if current_flashcards and len(current_flashcards) > 0:
+                if selected_flashcard:
+                    context_parts.append("\nAll flashcards (for context):")
+                else:
+                    context_parts.append("\nCurrent flashcards:")
+                for i, f in enumerate(current_flashcards[:5], 1):  # Limit to first 5 for context
+                    context_parts.append(f"\nFlashcard {i}:")
+                    context_parts.append(f"Front: {f.get('front', '')}")
+                    context_parts.append(f"Back: {f.get('back', '')}")
+            
+            context = "\n".join(context_parts) if context_parts else "No current flashcards provided."
+
+            user_prompt = f"""Context:
+{context}
+
+User's request: {message}
+
+Please help the user with their flashcard editing request. If they're asking for new flashcards, provide them in the JSON format specified."""
+
+            response = await client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": settings.GROQ_MODEL,
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": system_prompt
+                        },
+                        {
+                            "role": "user",
+                            "content": user_prompt
+                        }
+                    ],
+                    "max_tokens": 2000,
+                    "temperature": 0.7,
+                    "top_p": 0.9
+                },
+                timeout=60.0
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                if "choices" in result and len(result["choices"]) > 0:
+                    reply = result["choices"][0]["message"]["content"].strip()
+                    print(f"SUCCESS: Groq flashcard edit chat response generated")
+                    return reply
+                else:
+                    raise Exception("Groq API returned unexpected format")
+            else:
+                error_text = response.text
+                print(f"ERROR: Groq API error: {response.status_code} - {error_text}")
+                raise Exception(f"Groq API error: {response.status_code}")
+
+    except Exception as e:
+        print(f"ERROR: Groq API flashcard edit chat error: {str(e)}")
+        raise
+
+async def call_flashcard_edit_chat_model(
+    message: str,
+    current_flashcards: list[dict] | None = None,
+    flashcard_name: str | None = None,
+    filename: str | None = None,
+    selected_flashcard: dict | None = None
+) -> str:
+    """
+    Call AI model for flashcard editing chat.
+    Tries Groq API first, then falls back to basic responses.
+    """
+    # Try Groq API first
+    try:
+        if settings.GROQ_API_KEY:
+            return await _chat_flashcard_edit_with_groq_api(
+                message, current_flashcards, flashcard_name, filename, selected_flashcard
+            )
+    except Exception as groq_error:
+        print(f"Groq API failed: {groq_error}")
+    
+    # Fallback to basic response
+    return f"I understand you want to: {message}. However, the AI service is currently unavailable. Please try again later or use the manual flashcard editor."
+
+@router.post("/flashcard-edit", response_model=ChatResponse)
+async def chat_with_flashcard_edit(
+    request: FlashcardEditChatRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Chat endpoint for flashcard editing assistance.
+    Takes a user message and current flashcards, returns AI response with potential new flashcards.
+    """
+    try:
+        # Validate inputs
+        if not request.message or not request.message.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Message cannot be empty"
+            )
+        
+        # Call AI model to generate response
+        reply = await call_flashcard_edit_chat_model(
+            request.message,
+            request.current_flashcards,
+            request.flashcard_name,
+            request.filename,
+            request.selected_flashcard
+        )
+        
+        return ChatResponse(reply=reply)
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"ERROR: Flashcard edit chat endpoint error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate flashcard edit chat response: {str(e)}"
         )
