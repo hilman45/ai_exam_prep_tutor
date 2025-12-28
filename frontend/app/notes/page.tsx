@@ -25,6 +25,8 @@ export default function NotesPage() {
   const [editedContent, setEditedContent] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [aiGeneratedNotes, setAiGeneratedNotes] = useState<string | null>(null)
+  const [showPreviewModal, setShowPreviewModal] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -294,7 +296,10 @@ export default function NotesPage() {
             ) : (
               <div className="min-h-96 p-4 border border-gray-200 rounded-lg bg-white">
                 <div className="prose max-w-none">
-                  <div className="whitespace-pre-line text-gray-800 leading-relaxed">
+                  <div 
+                    className="whitespace-pre-wrap text-gray-800 leading-relaxed"
+                    style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
+                  >
                     {editedContent}
                   </div>
                 </div>
@@ -304,8 +309,102 @@ export default function NotesPage() {
         </div>
       </div>
       
-      {/* Chat Assistant - only show when notes are loaded */}
-      {notesData && <NotesChat notes={editedContent || notesData.summaryText} />}
+      {/* AI Chat Panel - Only visible when in edit mode */}
+      {isEditing && notesData && (
+        <NotesChat 
+          notes={editedContent || notesData.summaryText}
+          notesName={notesData.notesName}
+          filename={notesData.filename}
+          onNotesUpdated={(updatedNotes: string) => {
+            setAiGeneratedNotes(updatedNotes)
+            setShowPreviewModal(true)
+          }}
+        />
+      )}
+
+      {/* Preview Modal for AI Generated Notes */}
+      {showPreviewModal && aiGeneratedNotes && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={() => {
+            setAiGeneratedNotes(null)
+            setShowPreviewModal(false)
+          }}
+        >
+          <div 
+            className="bg-white rounded-lg p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-900">Preview AI-Generated Notes</h3>
+              <button
+                onClick={() => {
+                  setAiGeneratedNotes(null)
+                  setShowPreviewModal(false)
+                }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                Updated notes content generated. Choose how you'd like to apply it:
+              </p>
+            </div>
+
+            <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg max-h-[400px] overflow-y-auto">
+              <div className="prose max-w-none">
+                <div 
+                  className="whitespace-pre-wrap text-gray-800 leading-relaxed"
+                  style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
+                >
+                  {aiGeneratedNotes}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setAiGeneratedNotes(null)
+                  setShowPreviewModal(false)
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Keep Current Version
+              </button>
+              <button
+                onClick={async () => {
+                  // Add to current notes
+                  const currentNotes = editedContent || notesData?.summaryText || ''
+                  const combinedNotes = currentNotes + '\n\n' + aiGeneratedNotes
+                  setEditedContent(combinedNotes)
+                  setAiGeneratedNotes(null)
+                  setShowPreviewModal(false)
+                }}
+                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors"
+              >
+                Add to Current Notes
+              </button>
+              <button
+                onClick={async () => {
+                  // Replace current notes
+                  setEditedContent(aiGeneratedNotes)
+                  setAiGeneratedNotes(null)
+                  setShowPreviewModal(false)
+                }}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              >
+                Replace Current Notes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   )
 }

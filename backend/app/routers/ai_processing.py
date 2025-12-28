@@ -75,46 +75,96 @@ def chunk_text(text: str, max_chars: int = CHUNK_SIZE) -> List[str]:
 
 def get_summary_prompt(text: str, format_type: str) -> str:
     """
-    Generate format-specific prompt for summarization.
+    Generate format-specific prompt for concise notes generation.
     
     Args:
-        text: The text to summarize
+        text: The text to create notes from
         format_type: "normal" or "bullet_points"
         
     Returns:
-        Formatted prompt for the model
+        Formatted prompt for the model requesting concise summaries
     """
-    # Always use the same prompt for BART - we'll format the output later
-    return f"Summarize the following text:\n\n{text}"
+    if format_type == "bullet_points":
+        return f"""Create concise study notes from the following text using bullet points.
+
+Requirements:
+- Use actual bullet points (•) not markdown headings (#)
+- Each bullet should be concise but explanatory
+- Focus on key concepts and main ideas
+- Keep it brief and easy to scan
+
+Text:
+{text}
+
+Generate concise bullet-point notes:"""
+    else:
+        return f"""Create a concise summary from the following text.
+
+Requirements:
+- Write a brief, clear summary in paragraph form
+- Focus on key concepts and main ideas
+- Keep it concise and easy to read
+- Avoid unnecessary details
+
+Text:
+{text}
+
+Generate a concise summary:"""
 
 def format_summary_as_bullets(summary_text: str) -> str:
     """
-    Convert a summary text into bullet point format.
+    Format summary text as bullet points using actual bullets (•).
+    Converts markdown headings to bullets. Only used as fallback if AI doesn't generate proper bullets.
     
     Args:
-        summary_text: The summary text to convert
+        summary_text: The summary text to format
         
     Returns:
-        Bullet point formatted text
+        Bullet point formatted text with actual bullets
     """
-    # Split by sentences and create bullet points
-    sentences = summary_text.split('. ')
+    # If the text already contains bullet points, preserve them
+    if '•' in summary_text:
+        # But still convert any markdown headings to bullets
+        lines = summary_text.split('\n')
+        result_lines = []
+        for line in lines:
+            if line.strip().startswith('#'):
+                # Convert markdown heading to bullet
+                line = line.lstrip('#').strip()
+                if line:
+                    result_lines.append(f"• {line}")
+            else:
+                result_lines.append(line)
+        return '\n'.join(result_lines)
     
-    # Clean up and filter empty sentences
+    # Split by lines and convert to bullets
+    lines = summary_text.split('\n')
     bullet_points = []
-    for sentence in sentences:
-        sentence = sentence.strip()
-        if sentence and len(sentence) > 10:  # Only include substantial sentences
-            # Remove trailing period if present
-            if sentence.endswith('.'):
-                sentence = sentence[:-1]
-            bullet_points.append(f"• {sentence}")
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        
+        # Remove markdown headings and convert to bullets
+        if line.startswith('#'):
+            line = line.lstrip('#').strip()
+            if line:
+                bullet_points.append(f"• {line}")
+        elif line.startswith('-') or line.startswith('*'):
+            # Convert dashes/asterisks to bullets
+            line = line.lstrip('-*').strip()
+            if line:
+                bullet_points.append(f"• {line}")
+        else:
+            # Regular line - add bullet
+            bullet_points.append(f"• {line}")
     
     return '\n'.join(bullet_points)
 
 async def call_model_for_summarization(chunked_texts: List[str], format_type: str = "normal") -> str:
     """
-    Call AI model for summarization with Groq API, local transformers, or Hugging Face API fallback.
+    Call AI model for summarization with Groq API or local transformers fallback.
     
     Args:
         chunked_texts: List of text chunks to summarize
@@ -135,16 +185,7 @@ async def call_model_for_summarization(chunked_texts: List[str], format_type: st
         return await _summarize_with_local_model(chunked_texts, format_type)
     except Exception as local_error:
         print(f"Local model failed: {local_error}")
-        
-        # Fallback to Hugging Face API if available
-        if settings.HUGGINGFACE_API_KEY:
-            try:
-                return await _summarize_with_hf_api(chunked_texts, format_type)
-            except Exception as api_error:
-                print(f"HF API failed: {api_error}")
-                raise Exception(f"All AI services failed. Groq: {groq_error if 'groq_error' in locals() else 'N/A'}, Local: {local_error}, HF API: {api_error}")
-        else:
-            raise Exception(f"All AI services failed. Groq: {groq_error if 'groq_error' in locals() else 'N/A'}, Local: {local_error}, No HF API key available")
+        raise Exception(f"All AI services failed. Groq: {groq_error if 'groq_error' in locals() else 'N/A'}, Local: {local_error}")
 
 def check_gpu_memory() -> tuple[bool, str]:
     """
@@ -194,13 +235,13 @@ async def _summarize_with_local_model(chunked_texts: List[str], format_type: str
             print(f"AI: Using {device_name} for processing - {gpu_status}")
         
         print("AI: Initializing BART-large-CNN summarization pipeline...")
-        # Initialize summarization pipeline with optimized parameters for better paraphrasing
+        # Initialize summarization pipeline with optimized parameters for concise summaries
         summarizer = pipeline(
             "summarization",
             model="facebook/bart-large-cnn",
             device=device,  # Use GPU if available, otherwise CPU
-            max_length=200,  # Increased for more comprehensive summaries
-            min_length=50,   # Increased minimum for better paraphrasing
+            max_length=200,  # Concise summaries
+            min_length=50,   # Minimum for brief summaries
             do_sample=True,   # Enable sampling for more natural paraphrasing
             temperature=0.7,  # Add some creativity to avoid exact copying
             top_p=0.9,        # Nucleus sampling for better quality
@@ -217,11 +258,11 @@ async def _summarize_with_local_model(chunked_texts: List[str], format_type: str
                 # Create format-specific prompt
                 prompt = get_summary_prompt(chunk, format_type)
                 
-                # Summarize each chunk with optimized parameters for better paraphrasing
+                # Generate concise summaries with optimized parameters
                 result = summarizer(
                     prompt, 
-                    max_length=200,  # Increased for more comprehensive summaries
-                    min_length=50,   # Increased minimum for better paraphrasing
+                    max_length=200,  # Concise summaries
+                    min_length=50,   # Minimum for brief summaries
                     do_sample=True,   # Enable sampling for natural paraphrasing
                     temperature=0.7,  # Add creativity
                     top_p=0.9,        # Nucleus sampling
@@ -249,8 +290,8 @@ async def _summarize_with_local_model(chunked_texts: List[str], format_type: str
                 final_prompt = get_summary_prompt(combined_text, format_type)
                 final_result = summarizer(
                     final_prompt, 
-                    max_length=250,  # Slightly longer for final summary
-                    min_length=60,   # Minimum for comprehensive final summary
+                    max_length=250,  # Concise final summaries
+                    min_length=60,   # Minimum for brief final summaries
                     do_sample=True,   # Enable sampling for natural paraphrasing
                     temperature=0.7,  # Add creativity
                     top_p=0.9,        # Nucleus sampling
@@ -321,17 +362,31 @@ async def _simple_text_summary(chunked_texts: List[str]) -> str:
         return fallback
 
 async def _summarize_with_groq_api(chunked_texts: List[str], format_type: str = "normal") -> str:
-    """Summarize using Groq API with LLaMA 3.3 70B model."""
+    """Generate concise summaries using Groq API with LLaMA 3.3 70B model."""
     try:
         async with httpx.AsyncClient() as client:
             chunk_summaries = []
             
             for i, chunk in enumerate(chunked_texts):
-                # Create format-specific prompt
+                # Create format-specific prompt with detailed requirements
+                prompt = get_summary_prompt(chunk, format_type)
+                
+                # System prompt for concise summaries
                 if format_type == "bullet_points":
-                    prompt = f"Summarize the following text into clear bullet points:\n\n{chunk}"
+                    system_prompt = """You are an expert at creating concise study notes. Create brief but clear bullet points.
+
+Guidelines:
+- Use actual bullet points (•) not markdown headings (#)
+- Each bullet should be concise but explanatory
+- Focus on key concepts and main ideas
+- Keep it brief and easy to scan"""
                 else:
-                    prompt = f"Summarize the following text in a clear, concise paragraph:\n\n{chunk}"
+                    system_prompt = """You are an expert at creating concise summaries. Create brief but clear summaries.
+
+Guidelines:
+- Write concise paragraphs focusing on key concepts
+- Keep it brief and easy to read
+- Avoid unnecessary details"""
                 
                 response = await client.post(
                     "https://api.groq.com/openai/v1/chat/completions",
@@ -344,14 +399,14 @@ async def _summarize_with_groq_api(chunked_texts: List[str], format_type: str = 
                         "messages": [
                             {
                                 "role": "system",
-                                "content": "You are an expert at creating clear, educational summaries. Focus on key concepts and main ideas."
+                                "content": system_prompt
                             },
                             {
                                 "role": "user",
                                 "content": prompt
                             }
                         ],
-                        "max_tokens": 300,
+                        "max_tokens": 800,  # Concise summaries
                         "temperature": 0.7,
                         "top_p": 0.9
                     },
@@ -362,8 +417,9 @@ async def _summarize_with_groq_api(chunked_texts: List[str], format_type: str = 
                     result = response.json()
                     if "choices" in result and len(result["choices"]) > 0:
                         chunk_summary = result["choices"][0]["message"]["content"].strip()
+                        # Don't apply format_summary_as_bullets - AI generates proper format from prompt
                         chunk_summaries.append(chunk_summary)
-                        print(f"SUCCESS: Groq summarized chunk {i+1}/{len(chunked_texts)}")
+                        print(f"SUCCESS: Groq generated detailed notes for chunk {i+1}/{len(chunked_texts)} (length: {len(chunk_summary)} chars)")
                     else:
                         print(f"ERROR: Groq API returned unexpected format for chunk {i+1}")
                         chunk_summaries.append(chunk[:200] + "...")
@@ -373,13 +429,27 @@ async def _summarize_with_groq_api(chunked_texts: List[str], format_type: str = 
             
             # Combine chunk summaries
             if len(chunk_summaries) > 1:
-                combined_text = " ".join(chunk_summaries)
-                if len(combined_text) > 1000:
-                    # Summarize the combined text
+                combined_text = "\n\n".join(chunk_summaries)  # Use double newline to preserve structure
+                if len(combined_text) > 1500:  # Only re-summarize if very long
+                    # Create final comprehensive notes from combined chunks
+                    final_prompt = get_summary_prompt(combined_text, format_type)
+                    
+                    # System prompt for concise summaries
                     if format_type == "bullet_points":
-                        final_prompt = f"Summarize the following combined summaries into clear bullet points:\n\n{combined_text}"
+                        system_prompt = """You are an expert at creating concise study notes. Create brief but clear bullet points.
+
+Guidelines:
+- Use actual bullet points (•) not markdown headings (#)
+- Each bullet should be concise but explanatory
+- Focus on key concepts and main ideas
+- Keep it brief and easy to scan"""
                     else:
-                        final_prompt = f"Create a final, concise summary from these summaries:\n\n{combined_text}"
+                        system_prompt = """You are an expert at creating concise summaries. Create brief but clear summaries.
+
+Guidelines:
+- Write concise paragraphs focusing on key concepts
+- Keep it brief and easy to read
+- Avoid unnecessary details"""
                     
                     response = await client.post(
                         "https://api.groq.com/openai/v1/chat/completions",
@@ -392,14 +462,14 @@ async def _summarize_with_groq_api(chunked_texts: List[str], format_type: str = 
                             "messages": [
                                 {
                                     "role": "system",
-                                    "content": "You are an expert at creating clear, educational summaries. Focus on key concepts and main ideas."
+                                    "content": system_prompt
                                 },
                                 {
                                     "role": "user",
                                     "content": final_prompt
                                 }
                             ],
-                            "max_tokens": 400,
+                            "max_tokens": 1000,  # Concise final summaries
                             "temperature": 0.7,
                             "top_p": 0.9
                         },
@@ -410,111 +480,21 @@ async def _summarize_with_groq_api(chunked_texts: List[str], format_type: str = 
                         result = response.json()
                         if "choices" in result and len(result["choices"]) > 0:
                             final_summary = result["choices"][0]["message"]["content"].strip()
-                            print(f"SUCCESS: Groq final summary generated")
+                            # Don't apply format_summary_as_bullets - AI generates proper format from prompt
+                            print(f"SUCCESS: Groq final detailed notes generated (length: {len(final_summary)} chars)")
                             return final_summary
                 
-                print(f"SUCCESS: Groq combined summary generated")
+                # Don't apply format_summary_as_bullets - preserve AI-generated structure
+                print(f"SUCCESS: Groq combined detailed notes generated (length: {len(combined_text)} chars)")
                 return combined_text
             else:
-                final_summary = chunk_summaries[0] if chunk_summaries else "Unable to generate summary."
-                print(f"SUCCESS: Groq single chunk summary generated")
+                final_summary = chunk_summaries[0] if chunk_summaries else "Unable to generate notes."
+                # Don't apply format_summary_as_bullets - AI generates proper format from prompt
+                print(f"SUCCESS: Groq single chunk detailed notes generated (length: {len(final_summary)} chars)")
                 return final_summary
                 
     except Exception as e:
         raise Exception(f"Groq API error: {str(e)}")
-
-async def _summarize_with_hf_api(chunked_texts: List[str], format_type: str = "normal") -> str:
-    """Summarize using Hugging Face Inference API."""
-    try:
-        async with httpx.AsyncClient() as client:
-            chunk_summaries = []
-            
-            for chunk in chunked_texts:
-                prompt = get_summary_prompt(chunk, format_type)
-                response = await client.post(
-                    "https://api-inference.huggingface.co/models/facebook/bart-large-cnn",
-                    headers={
-                        "Authorization": f"Bearer {settings.HUGGINGFACE_API_KEY}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "inputs": prompt,
-                        "parameters": {
-                            "max_length": 200,
-                            "min_length": 50,
-                            "do_sample": True,
-                            "temperature": 0.7,
-                            "top_p": 0.9,
-                            "repetition_penalty": 1.1,
-                            "no_repeat_ngram_size": 3
-                        }
-                    },
-                    timeout=30.0
-                )
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    if isinstance(result, list) and len(result) > 0:
-                        chunk_summary = result[0]['summary_text']
-                        # Apply formatting if needed
-                        if format_type == "bullet_points":
-                            chunk_summary = format_summary_as_bullets(chunk_summary)
-                        chunk_summaries.append(chunk_summary)
-                    else:
-                        chunk_summaries.append(chunk[:200] + "...")
-                else:
-                    print(f"HF API error for chunk: {response.status_code}")
-                    chunk_summaries.append(chunk[:200] + "...")
-            
-            # Combine chunk summaries
-            if len(chunk_summaries) > 1:
-                combined_text = " ".join(chunk_summaries)
-                if len(combined_text) > 1000:
-                    # Summarize the combined text
-                    final_prompt = get_summary_prompt(combined_text, format_type)
-                    response = await client.post(
-                        "https://api-inference.huggingface.co/models/facebook/bart-large-cnn",
-                        headers={
-                            "Authorization": f"Bearer {settings.HUGGINGFACE_API_KEY}",
-                            "Content-Type": "application/json"
-                        },
-                        json={
-                            "inputs": final_prompt,
-                            "parameters": {
-                                "max_length": 250,
-                                "min_length": 60,
-                                "do_sample": True,
-                                "temperature": 0.7,
-                                "top_p": 0.9,
-                                "repetition_penalty": 1.1,
-                                "no_repeat_ngram_size": 3
-                            }
-                        },
-                        timeout=30.0
-                    )
-                    
-                    if response.status_code == 200:
-                        result = response.json()
-                        if isinstance(result, list) and len(result) > 0:
-                            final_summary = result[0]['summary_text']
-                            # Apply formatting if needed
-                            if format_type == "bullet_points":
-                                final_summary = format_summary_as_bullets(final_summary)
-                            return final_summary
-                
-                # Apply formatting to combined text if needed
-                if format_type == "bullet_points":
-                    combined_text = format_summary_as_bullets(combined_text)
-                return combined_text
-            else:
-                final_summary = chunk_summaries[0] if chunk_summaries else "Unable to generate summary."
-                # Apply formatting if needed
-                if format_type == "bullet_points":
-                    final_summary = format_summary_as_bullets(final_summary)
-                return final_summary
-                
-    except Exception as e:
-        raise Exception(f"HF API error: {str(e)}")
 
 async def get_file_content(file_id: str, user_token: str) -> Optional[Dict[str, Any]]:
     """Fetch file content from Supabase with ownership check using user token."""

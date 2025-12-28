@@ -5,18 +5,22 @@ import { chatService, ChatMessage } from '../lib/chatService'
 
 interface NotesChatProps {
   notes: string
+  notesName?: string
+  filename?: string
+  onNotesUpdated?: (updatedNotes: string) => void
 }
 
-const SUGGESTED_PROMPTS = [
-  "Summarize my notes",
-  "Explain the main concepts",
-  "What are the key points?",
-  "Simplify this content",
-  "Define important terms",
-  "Create a study guide"
+const EDIT_SUGGESTED_PROMPTS = [
+  "Add more details",
+  "Make it more concise",
+  "Reorganize the content",
+  "Add examples",
+  "Improve clarity",
+  "Expand on key points"
 ]
 
-export default function NotesChat({ notes }: NotesChatProps) {
+
+export default function NotesChat({ notes, notesName, filename, onNotesUpdated }: NotesChatProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [inputValue, setInputValue] = useState('')
@@ -52,8 +56,28 @@ export default function NotesChat({ notes }: NotesChatProps) {
     setIsLoading(true)
 
     try {
-      // Call backend API
-      const reply = await chatService.sendMessage(userMessage.content, notes)
+      // Always use notes edit endpoint since this is edit mode only
+      const reply = await chatService.sendNotesEditMessage(
+        userMessage.content,
+        notes,
+        notesName || null,
+        filename || null
+      )
+      
+      // Check if reply looks like updated notes (longer response, contains actual content)
+      // If it's significantly longer than a typical chat response, it's likely updated notes
+      if (reply.length > 200 && onNotesUpdated) {
+        // Trigger preview modal
+        onNotesUpdated(reply)
+        // Add assistant response
+        const assistantMessage: ChatMessage = {
+          role: 'assistant',
+          content: reply,
+          isUpdatedNotes: true
+        }
+        setMessages(prev => [...prev, assistantMessage])
+        return
+      }
       
       // Add assistant response
       const assistantMessage: ChatMessage = {
@@ -89,7 +113,8 @@ export default function NotesChat({ notes }: NotesChatProps) {
   }
 
   const handlePromptClick = async (prompt: string) => {
-    // Create user message
+    if (isLoading) return
+
     const userMessage: ChatMessage = {
       role: 'user',
       content: prompt
@@ -100,19 +125,35 @@ export default function NotesChat({ notes }: NotesChatProps) {
     setIsLoading(true)
 
     try {
-      // Call backend API
-      const reply = await chatService.sendMessage(prompt, notes)
+      // Always use notes edit endpoint
+      const reply = await chatService.sendNotesEditMessage(
+        prompt,
+        notes,
+        notesName || null,
+        filename || null
+      )
       
-      // Add assistant response
-      const assistantMessage: ChatMessage = {
-        role: 'assistant',
-        content: reply
+      // Check if reply looks like updated notes
+      if (reply.length > 200 && onNotesUpdated) {
+        // Trigger preview modal
+        onNotesUpdated(reply)
+        // Add assistant response
+        const assistantMessage: ChatMessage = {
+          role: 'assistant',
+          content: reply,
+          isUpdatedNotes: true
+        }
+        setMessages(prev => [...prev, assistantMessage])
+      } else {
+        // Add assistant response
+        const assistantMessage: ChatMessage = {
+          role: 'assistant',
+          content: reply
+        }
+        setMessages(prev => [...prev, assistantMessage])
       }
-      
-      setMessages(prev => [...prev, assistantMessage])
     } catch (error) {
       console.error('Error sending message:', error)
-      // Add error message with more details
       const errorMessage: ChatMessage = {
         role: 'assistant',
         content: error instanceof Error 
@@ -144,7 +185,7 @@ export default function NotesChat({ notes }: NotesChatProps) {
               strokeLinecap="round"
               strokeLinejoin="round"
               strokeWidth={2}
-              d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
             />
           </svg>
         </button>
@@ -169,7 +210,7 @@ export default function NotesChat({ notes }: NotesChatProps) {
                   d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
                 />
               </svg>
-              <h3 className="font-semibold">Notes Assistant</h3>
+              <h3 className="font-semibold">Notes Editor</h3>
             </div>
             <div className="flex items-center space-x-2">
               {messages.length > 0 && (
@@ -233,9 +274,9 @@ export default function NotesChat({ notes }: NotesChatProps) {
                     d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
                   />
                 </svg>
-                <p className="text-sm">Ask me anything about your notes!</p>
+                <p className="text-sm">Ask me to edit your notes!</p>
                 <p className="text-xs text-gray-400 mt-2">
-                  Try: "Summarize my notes" or "Explain the main concepts"
+                  Try: "Add more details" or "Make it more concise"
                 </p>
               </div>
             ) : (
@@ -256,6 +297,13 @@ export default function NotesChat({ notes }: NotesChatProps) {
                     <p className="text-sm whitespace-pre-wrap break-words">
                       {message.content}
                     </p>
+                    {message.isUpdatedNotes && onNotesUpdated && (
+                      <div className="mt-3 pt-3 border-t border-gray-200">
+                        <p className="text-xs text-gray-600 mb-2">
+                          Updated notes content generated. Check the preview modal.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))
@@ -279,12 +327,12 @@ export default function NotesChat({ notes }: NotesChatProps) {
 
           {/* Input Area */}
           <div className="border-t border-gray-200 bg-white rounded-b-lg">
-            {/* Prompt Suggestions - Show when no messages or when messages exist */}
+            {/* Prompt Suggestions */}
             {messages.length === 0 && !isLoading && (
               <div className="p-3 border-b border-gray-200">
                 <p className="text-xs text-gray-500 mb-2 font-medium">Quick prompts:</p>
                 <div className="flex flex-wrap gap-2">
-                  {SUGGESTED_PROMPTS.map((prompt, index) => (
+                  {EDIT_SUGGESTED_PROMPTS.map((prompt, index) => (
                     <button
                       key={index}
                       onClick={() => handlePromptClick(prompt)}
@@ -305,7 +353,7 @@ export default function NotesChat({ notes }: NotesChatProps) {
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Ask about your notes..."
+                placeholder="Ask to edit your notes..."
                 className="flex-1 resize-none border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-200"
                 rows={1}
                 disabled={isLoading}

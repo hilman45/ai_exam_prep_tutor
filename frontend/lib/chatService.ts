@@ -15,6 +15,7 @@ export interface ChatMessage {
     front: string
     back: string
   }>
+  isUpdatedNotes?: boolean
 }
 
 export interface ChatRequest {
@@ -287,6 +288,45 @@ class ChatService {
       throw error
     }
   }
+
+  async sendNotesEditMessage(
+    message: string,
+    currentNotes?: string | null,
+    notesName?: string | null,
+    filename?: string | null
+  ): Promise<string> {
+    try {
+      const headers = await this.getAuthHeaders()
+      const response = await fetch(`${API_BASE_URL}/api/chat/notes-edit`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          message,
+          current_notes: currentNotes || null,
+          notes_name: notesName || null,
+          filename: filename || null
+        } as NotesEditChatRequest),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }))
+        throw new Error(errorData.detail || `Failed to send message: ${response.statusText}`)
+      }
+
+      const data: ChatResponse = await response.json()
+      return data.reply
+    } catch (error) {
+      console.error('Error sending notes edit chat message:', error)
+      throw error
+    }
+  }
+}
+
+export interface NotesEditChatRequest {
+  message: string
+  current_notes?: string | null
+  notes_name?: string | null
+  filename?: string | null
 }
 
 export const chatService = new ChatService()

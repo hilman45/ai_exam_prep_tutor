@@ -46,6 +46,12 @@ class FlashcardEditChatRequest(BaseModel):
     filename: str | None = None
     selected_flashcard: dict | None = None
 
+class NotesEditChatRequest(BaseModel):
+    message: str
+    current_notes: str | None = None
+    notes_name: str | None = None
+    filename: str | None = None
+
 async def _chat_with_groq_api(message: str, notes: str) -> str:
     """Chat with notes context using Groq API."""
     try:
@@ -1025,4 +1031,163 @@ async def chat_with_flashcard_edit(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate flashcard edit chat response: {str(e)}"
+        )
+
+async def _chat_notes_edit_with_groq_api(
+    message: str,
+    current_notes: str | None = None,
+    notes_name: str | None = None,
+    filename: str | None = None
+) -> str:
+    """Chat for notes editing using Groq API."""
+    try:
+        async with httpx.AsyncClient() as client:
+            system_prompt = """You are PrepWise, an AI assistant helping users improve and edit their study notes.
+
+Your role is to:
+- Generate updated notes content based on user requests
+- Improve existing notes (make them clearer, more concise, add details, reorganize, etc.)
+- Add new content to notes
+- Replace or modify specific sections
+- Keep, add, or replace content as requested
+
+CRITICAL INSTRUCTIONS:
+1. When the user asks you to update, modify, add, replace, or keep notes content, you MUST respond with the COMPLETE updated notes text. 
+   The response should be the full notes content, not just the changes.
+
+2. FOLLOW USER INSTRUCTIONS PRECISELY:
+   - If the user asks for a specific number (e.g., "2 more bullet points", "add 3 examples", "5 key points"), provide EXACTLY that number
+   - If the user says "add 2 bullet points", add exactly 2, not more or less
+   - If the user specifies a format or structure, follow it exactly
+   - Pay close attention to quantities, formats, and specific requirements in the user's request
+
+3. If the user is asking for general help or explanations (not editing notes), respond normally with text.
+
+Always be helpful, clear, and educational, but most importantly, follow the user's specific instructions exactly."""
+
+            # Build context from current notes
+            context_parts = []
+            if notes_name:
+                context_parts.append(f"Notes Name: {notes_name}")
+            if filename:
+                context_parts.append(f"Source File: {filename}")
+            
+            if current_notes:
+                # Include current notes content (limit length to avoid token limits)
+                notes_preview = current_notes[:2000] if len(current_notes) > 2000 else current_notes
+                context_parts.append(f"\n=== CURRENT NOTES ===")
+                context_parts.append(notes_preview)
+                if len(current_notes) > 2000:
+                    context_parts.append(f"\n... (notes continue, {len(current_notes) - 2000} more characters)")
+                context_parts.append("===\n")
+            
+            context = "\n".join(context_parts) if context_parts else "No current notes provided."
+
+            user_prompt = f"""Context:
+{context}
+
+User's request: {message}
+
+IMPORTANT: Follow the user's request EXACTLY as specified. If they ask for a specific number of items (e.g., "2 bullet points", "3 examples"), provide EXACTLY that number - no more, no less.
+
+Please help the user with their notes editing request. If they're asking to update, modify, add, replace, or keep notes content, provide the COMPLETE updated notes text. Pay special attention to any specific quantities, formats, or requirements mentioned in their request. Otherwise, provide a helpful response."""
+
+            response = await client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": settings.GROQ_MODEL,
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": system_prompt
+                        },
+                        {
+                            "role": "user",
+                            "content": user_prompt
+                        }
+                    ],
+                    "max_tokens": 3000,
+                    "temperature": 0.7,
+                    "top_p": 0.9
+                },
+                timeout=60.0
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                if "choices" in result and len(result["choices"]) > 0:
+                    reply = result["choices"][0]["message"]["content"].strip()
+                    print(f"SUCCESS: Groq notes edit chat response generated")
+                    return reply
+                else:
+                    raise Exception("Groq API returned unexpected format")
+            else:
+                error_text = response.text
+                print(f"ERROR: Groq API error: {response.status_code} - {error_text}")
+                raise Exception(f"Groq API error: {response.status_code}")
+
+    except Exception as e:
+        print(f"ERROR: Groq API notes edit chat error: {str(e)}")
+        raise
+
+async def call_notes_edit_chat_model(
+    message: str,
+    current_notes: str | None = None,
+    notes_name: str | None = None,
+    filename: str | None = None
+) -> str:
+    """
+    Call AI model for notes editing chat.
+    Tries Groq API first, then falls back to basic responses.
+    """
+    # Try Groq API first
+    try:
+        if settings.GROQ_API_KEY:
+            return await _chat_notes_edit_with_groq_api(
+                message, current_notes, notes_name, filename
+            )
+    except Exception as groq_error:
+        print(f"Groq API failed: {groq_error}")
+    
+    # Fallback to basic response
+    return f"I understand you want to: {message}. However, the AI service is currently unavailable. Please try again later or use the manual notes editor."
+
+@router.post("/notes-edit", response_model=ChatResponse)
+async def chat_with_notes_edit(
+    request: NotesEditChatRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Chat endpoint for notes editing assistance.
+    Takes a user message and current notes, returns AI response with potential updated notes.
+    """
+    try:
+        # Validate inputs
+        if not request.message or not request.message.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Message cannot be empty"
+            )
+        
+        # Call AI model to generate response
+        reply = await call_notes_edit_chat_model(
+            request.message,
+            request.current_notes,
+            request.notes_name,
+            request.filename
+        )
+        
+        return ChatResponse(reply=reply)
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"ERROR: Notes edit chat endpoint error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate notes edit chat response: {str(e)}"
         )
