@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, authHelpers } from '../lib/supabase'
+import { folderService, Folder } from '../lib/folderService'
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -22,8 +23,10 @@ export default function DashboardLayout({
   const [profilePicture, setProfilePicture] = useState<string | null>(null)
   const [fullName, setFullName] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false)
+  const [myFolderOpen, setMyFolderOpen] = useState(true)
+  const [recentFolders, setRecentFolders] = useState<Folder[]>([])
+  const [foldersLoading, setFoldersLoading] = useState(false)
   const router = useRouter()
 
   const loadProfileData = async (userId: string) => {
@@ -45,6 +48,52 @@ export default function DashboardLayout({
     } catch (profileError) {
       console.error('Error fetching profile:', profileError)
       setUsername('User') // Fallback
+    }
+  }
+
+  // Load recent folders from localStorage
+  const loadRecentFoldersFromStorage = (): string[] => {
+    if (typeof window === 'undefined') return []
+    try {
+      const recent = localStorage.getItem('recent_folders')
+      if (recent) {
+        const folders = JSON.parse(recent)
+        return folders.map((f: Folder) => f.id)
+      }
+    } catch (error) {
+      console.error('Error loading recent folders:', error)
+    }
+    return []
+  }
+
+  // Load recent folders
+  const fetchRecentFolders = async () => {
+    if (!user) return
+    try {
+      setFoldersLoading(true)
+      const allFolders = await folderService.getFolders()
+      const recentIds = loadRecentFoldersFromStorage()
+      
+      if (recentIds.length === 0) {
+        // If no recent folders, show first 3 folders
+        setRecentFolders(allFolders.slice(0, 3))
+      } else {
+        // Filter and sort by recent order
+        const recent = allFolders
+          .filter(f => recentIds.includes(f.id))
+          .sort((a, b) => {
+            const aIndex = recentIds.indexOf(a.id)
+            const bIndex = recentIds.indexOf(b.id)
+            return aIndex - bIndex
+          })
+          .slice(0, 3)
+        setRecentFolders(recent)
+      }
+    } catch (error) {
+      console.error('Error fetching recent folders:', error)
+      setRecentFolders([])
+    } finally {
+      setFoldersLoading(false)
     }
   }
 
@@ -101,6 +150,13 @@ export default function DashboardLayout({
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
   }, [user])
 
+  // Load recent folders when user is available
+  useEffect(() => {
+    if (user && !loading) {
+      fetchRecentFolders()
+    }
+  }, [user, loading])
+
   const handleSignOut = async () => {
     try {
       await authHelpers.signOut()
@@ -126,19 +182,12 @@ export default function DashboardLayout({
 
   const getNavItemClasses = (tab: string) => {
     const baseClasses = "flex items-center space-x-3 py-2 px-3 rounded-lg transition-colors cursor-pointer group"
-    const isActive = activeTab === tab
-    
-    if (isActive) {
-      return `${baseClasses} bg-primary text-white`
-    }
-    
+    // Only show color on hover, not when active
     return `${baseClasses} hover:bg-primary hover:text-white`
   }
 
   const getIconColor = (tab: string) => {
-    const isActive = activeTab === tab
-    if (isActive) return '#FFFFFF'
-    
+    // Always return the default color, not white when active
     const colors = {
       home: '#7C3AED',
       notes: '#06B6D4',
@@ -176,17 +225,9 @@ export default function DashboardLayout({
   return (
     <div className="min-h-screen bg-white font-space-grotesk">
       {/* Header */}
-      <header className="bg-white border-b-2 border-black">
+      <header className="bg-white fixed top-0 left-64 right-0 z-20 h-16">
         <nav className="px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            {/* Logo */}
-            <div className="flex-shrink-0">
-              <h1 className="text-2xl font-bold text-dark">
-                <span className="text-black">Prep</span>
-                <span className="text-primary">Wise</span>
-              </h1>
-            </div>
-
+          <div className="flex justify-end items-center h-16">
             {/* Profile Picture/Icon with Dropdown */}
             <div className="relative">
               <button 
@@ -235,42 +276,29 @@ export default function DashboardLayout({
       </header>
 
       {/* Main Layout */}
-      <div className="flex min-h-screen">
+      <div className="flex min-h-screen pt-16">
         {/* Sidebar */}
-        <div className={`${sidebarBackground} border-r border-gray-200 transition-all duration-300 ease-in-out ${
-          sidebarCollapsed ? 'w-16' : 'w-64'
-        }`}>
-          <div className="p-4">
-            {/* Welcome Section */}
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-2">
-                {!sidebarCollapsed && (
-                  <span className="text-sm text-gray-900">
-                    Welcome, {username || 'User'}
-                  </span>
-                )}
-                <button
-                  onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                  className="w-6 h-6 rounded border border-gray-300 flex items-center justify-center hover:bg-primary hover:border-primary hover:text-white transition-colors"
-                >
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
-              </div>
+        <div className={`${sidebarBackground} border-r border-gray-200 flex flex-col w-64 fixed top-3 bottom-0 z-10`}>
+          <div className="p-3 flex flex-col flex-1">
+            {/* Logo */}
+            <div className="mb-3">
+              <h1 className="text-2xl font-bold text-dark">
+                <span className="text-black">Prep</span>
+                <span className="text-primary">Wise</span>
+              </h1>
             </div>
-
+            
             {/* Navigation */}
-            <nav className="space-y-2">
+            <nav className="space-y-1">
               {/* Home */}
               <div 
                 className={getNavItemClasses('home')}
                 onClick={() => router.push('/dashboard')}
               >
-                <svg className={`${sidebarCollapsed ? 'w-6 h-6' : 'w-5 h-5'} group-hover:text-white`} style={{color: getIconColor('home')}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 group-hover:text-white" style={{color: getIconColor('home')}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                 </svg>
-                {!sidebarCollapsed && <span className="text-sm text-gray-600 group-hover:text-white">Home</span>}
+                <span className="text-sm text-gray-600 group-hover:text-white">Home</span>
               </div>
 
               {/* Notes */}
@@ -278,18 +306,18 @@ export default function DashboardLayout({
                 className={getNavItemClasses('notes')}
                 onClick={() => router.push('/notes-generator')}
               >
-                <svg className={`${sidebarCollapsed ? 'w-6 h-6' : 'w-5 h-5'} group-hover:text-white`} style={{color: getIconColor('notes')}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 group-hover:text-white" style={{color: getIconColor('notes')}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                {!sidebarCollapsed && <span className="text-sm text-gray-600 group-hover:text-white">Notes</span>}
+                <span className="text-sm text-gray-600 group-hover:text-white">Notes</span>
               </div>
 
               {/* Quiz */}
               <div className={getNavItemClasses('quiz')}>
-                <svg className={`${sidebarCollapsed ? 'w-6 h-6' : 'w-5 h-5'} group-hover:text-white`} style={{color: getIconColor('quiz')}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 group-hover:text-white" style={{color: getIconColor('quiz')}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                 </svg>
-                {!sidebarCollapsed && <span className="text-sm text-gray-600 group-hover:text-white">Quiz</span>}
+                <span className="text-sm text-gray-600 group-hover:text-white">Quiz</span>
               </div>
 
               {/* Flashcards */}
@@ -297,24 +325,73 @@ export default function DashboardLayout({
                 className={getNavItemClasses('flashcards')}
                 onClick={() => router.push('/flashcard-generator')}
               >
-                <svg className={`${sidebarCollapsed ? 'w-6 h-6' : 'w-5 h-5'} group-hover:text-white`} style={{color: getIconColor('flashcards')}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 group-hover:text-white" style={{color: getIconColor('flashcards')}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                 </svg>
-                {!sidebarCollapsed && <span className="text-sm text-gray-600 group-hover:text-white">Flashcards</span>}
+                <span className="text-sm text-gray-600 group-hover:text-white">Flashcards</span>
+              </div>
+
+              {/* My Folder Section */}
+              <div className="mt-1">
+                <button
+                  onClick={() => setMyFolderOpen(!myFolderOpen)}
+                  className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
+                >
+                  <span>My Folder</span>
+                  <svg
+                    className={`w-4 h-4 transition-transform ${myFolderOpen ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {myFolderOpen && (
+                  <div className="ml-2 mt-1 space-y-0.5">
+                    {foldersLoading ? (
+                      <div className="px-3 py-1.5 text-xs text-gray-500">Loading...</div>
+                    ) : recentFolders.length > 0 ? (
+                      recentFolders.map((folder) => (
+                        <button
+                          key={folder.id}
+                          onClick={() => {
+                            router.push(`/folders/${folder.id}`)
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-100 rounded-lg transition-colors flex items-center space-x-2"
+                        >
+                          <div
+                            className="w-3 h-3 rounded"
+                            style={{ backgroundColor: folder.color }}
+                          />
+                          <span className="truncate">{folder.name}</span>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-3 py-1.5 text-xs text-gray-500">No recent folders</div>
+                    )}
+                    <button
+                      onClick={() => router.push('/my-folders')}
+                      className="w-full text-left px-3 py-1.5 text-xs text-primary hover:bg-primary hover:text-white rounded-lg transition-colors font-medium"
+                    >
+                      See All
+                    </button>
+                  </div>
+                )}
               </div>
             </nav>
 
             {/* Bottom Navigation */}
-            <div className="mt-8 space-y-2">
+            <div className="mt-4 space-y-1">
               {/* Analytics */}
               <div 
                 className={getNavItemClasses('analytics')}
                 onClick={() => router.push('/analytics')}
               >
-                <svg className={`${sidebarCollapsed ? 'w-6 h-6' : 'w-5 h-5'} group-hover:text-white`} style={{color: getIconColor('analytics')}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 group-hover:text-white" style={{color: getIconColor('analytics')}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
-                {!sidebarCollapsed && <span className="text-sm text-gray-600 group-hover:text-white">Analytic Tracking</span>}
+                <span className="text-sm text-gray-600 group-hover:text-white">Analytic Tracking</span>
               </div>
 
               {/* Profile */}
@@ -322,17 +399,30 @@ export default function DashboardLayout({
                 className={getNavItemClasses('profile')}
                 onClick={() => router.push('/profile')}
               >
-                <svg className={`${sidebarCollapsed ? 'w-6 h-6' : 'w-5 h-5'} group-hover:text-white`} style={{color: getIconColor('profile')}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 group-hover:text-white" style={{color: getIconColor('profile')}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
-                {!sidebarCollapsed && <span className="text-sm text-gray-600 group-hover:text-white">Profile</span>}
+                <span className="text-sm text-gray-600 group-hover:text-white">Profile</span>
               </div>
+            </div>
+
+            {/* Documentation Button at Bottom */}
+            <div className="mt-auto pt-3">
+              <button
+                onClick={() => router.push('/docs')}
+                className="w-full flex items-center justify-center space-x-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors font-medium text-sm"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+                <span>Documentation</span>
+              </button>
             </div>
           </div>
         </div>
 
         {/* Main Content */}
-        <div className={`flex-1 ${contentBackground}`}>
+        <div className={`flex-1 ${contentBackground} ml-64`}>
           {children}
         </div>
       </div>

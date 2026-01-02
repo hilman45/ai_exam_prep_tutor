@@ -46,6 +46,20 @@ export default function FolderPage() {
   // Get folder name from URL params for instant display
   const folderName = searchParams.get('name') || folder?.name || 'Loading...'
 
+  // Track folder access
+  const trackFolderAccess = (folder: Folder) => {
+    if (typeof window === 'undefined') return
+    try {
+      const recent = localStorage.getItem('recent_folders')
+      let recentFolders: Folder[] = recent ? JSON.parse(recent) : []
+      recentFolders = recentFolders.filter(f => f.id !== folder.id)
+      recentFolders.unshift(folder)
+      localStorage.setItem('recent_folders', JSON.stringify(recentFolders.slice(0, 10))) // Keep max 10
+    } catch (error) {
+      console.error('Error tracking folder access:', error)
+    }
+  }
+
   useEffect(() => {
     // Load folder data
     if (params.folderId) {
@@ -93,6 +107,7 @@ export default function FolderPage() {
       const foundFolder = userFolders.find(f => f.id === folderId)
       if (foundFolder) {
         setFolder(foundFolder)
+        trackFolderAccess(foundFolder) // Track folder access
         // Load summaries, quizzes, and flashcards (with caching)
         loadSummaries(folderId)
         loadQuizzes(folderId)
