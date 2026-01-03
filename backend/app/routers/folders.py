@@ -18,11 +18,13 @@ class FolderCreate(BaseModel):
 class FolderUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=50, description="Folder name")
     color: Optional[str] = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$", description="Hex color code")
+    picture_url: Optional[str] = Field(None, description="URL to folder picture")
 
 class FolderResponse(BaseModel):
     id: str
     name: str
     color: str
+    picture_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     materials_count: int = 0
@@ -94,6 +96,7 @@ async def create_folder(
                 id=folder["id"],
                 name=folder["name"],
                 color=folder["color"],
+                picture_url=folder.get("picture_url"),
                 created_at=folder["created_at"],
                 updated_at=folder["updated_at"],
                 materials_count=0
@@ -122,6 +125,7 @@ async def get_user_folders(
                 id=folder["id"],
                 name=folder["name"],
                 color=folder["color"],
+                picture_url=folder.get("picture_url"),
                 created_at=folder["created_at"],
                 updated_at=folder["updated_at"],
                 materials_count=materials_count.summaries + materials_count.quizzes + materials_count.flashcards,  # Only count generated content
@@ -168,6 +172,7 @@ async def get_folder(
                 id=folder["id"],
                 name=folder["name"],
                 color=folder["color"],
+                picture_url=folder.get("picture_url"),
                 created_at=folder["created_at"],
                 updated_at=folder["updated_at"],
                 materials_count=materials_count.summaries + materials_count.quizzes + materials_count.flashcards,  # Only count generated content
@@ -196,6 +201,10 @@ async def update_folder(
             update_data["name"] = folder_update.name
         if folder_update.color is not None:
             update_data["color"] = folder_update.color
+        # Allow setting picture_url to None (null) to remove picture
+        # Check if picture_url was provided in the request (even if None)
+        if 'picture_url' in folder_update.model_dump(exclude_unset=True):
+            update_data["picture_url"] = folder_update.picture_url
         
         if not update_data:
             raise HTTPException(
@@ -230,6 +239,7 @@ async def update_folder(
                 id=folder["id"],
                 name=folder["name"],
                 color=folder["color"],
+                picture_url=folder.get("picture_url"),
                 created_at=folder["created_at"],
                 updated_at=folder["updated_at"],
                 materials_count=0  # Will be calculated separately if needed

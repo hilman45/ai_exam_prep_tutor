@@ -7,6 +7,7 @@ export interface Folder {
   id: string
   name: string
   color: string
+  picture_url?: string | null
   created_at: string
   updated_at: string
   materials_count: number
@@ -26,6 +27,7 @@ export interface CreateFolderRequest {
 export interface UpdateFolderRequest {
   name?: string
   color?: string
+  picture_url?: string | null
 }
 
 class FolderService {

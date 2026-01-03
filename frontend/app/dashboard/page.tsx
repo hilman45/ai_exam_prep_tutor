@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { folderService, Folder } from '../../lib/folderService'
 import { quizService } from '../../lib/quizService'
+import { supabase, authHelpers } from '../../lib/supabase'
 import DashboardLayout from '../../components/DashboardLayout'
 
 interface StudyStreak {
@@ -16,14 +17,24 @@ const FOLDERS_CACHE_KEY = 'dashboard_folders_cache'
 const FOLDERS_CACHE_TIMESTAMP_KEY = 'dashboard_folders_cache_timestamp'
 const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
 
+// Folder color palette
+const FOLDER_COLORS = [
+  '#E9D5FF', // Light Lavender
+  '#BAE6FD', // Sky Blue
+  '#BBF7D0', // Mint Green
+  '#FEF9C3', // Soft Yellow
+  '#FBCFE8', // Blush Pink
+  '#FED7AA', // Pale Orange
+]
+
 export default function DashboardPage() {
   const [folderMenuOpen, setFolderMenuOpen] = useState<string | null>(null)
   const [addFolderModalOpen, setAddFolderModalOpen] = useState(false)
   const [folderName, setFolderName] = useState('')
+  const [selectedColor, setSelectedColor] = useState<string>(FOLDER_COLORS[0])
   const [folders, setFolders] = useState<Folder[]>([])
   const [foldersLoading, setFoldersLoading] = useState(false) // Start with false for instant display
   const [isInitialLoad, setIsInitialLoad] = useState(true) // Track if we're showing cached data
-  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
   const [studyStreak, setStudyStreak] = useState<StudyStreak | null>(null)
   const [streakLoading, setStreakLoading] = useState(true)
   const [renameModalOpen, setRenameModalOpen] = useState(false)
@@ -32,9 +43,28 @@ export default function DashboardPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<{ folder: Folder | null }>({ folder: null })
   const [deleting, setDeleting] = useState(false)
   const [renaming, setRenaming] = useState(false)
+  const [pictureModalOpen, setPictureModalOpen] = useState(false)
+  const [folderToUpdatePicture, setFolderToUpdatePicture] = useState<Folder | null>(null)
+  const [pictureFile, setPictureFile] = useState<File | null>(null)
+  const [picturePreview, setPicturePreview] = useState<string | null>(null)
+  const [uploadingPicture, setUploadingPicture] = useState(false)
+  const [user, setUser] = useState<any>(null)
   const router = useRouter()
 
   useEffect(() => {
+    // Check if user is authenticated
+    const checkUser = async () => {
+      try {
+        const { user, error } = await authHelpers.getCurrentUser()
+        if (!error && user) {
+          setUser(user)
+        }
+      } catch (error) {
+        console.error('Error checking user:', error)
+      }
+    }
+    checkUser()
+    
     // Load folders and streak when component mounts
     loadFolders()
     loadStudyStreak()
@@ -93,11 +123,6 @@ export default function DashboardPage() {
     if (cachedFolders) {
       setFolders(cachedFolders)
       setIsInitialLoad(false)
-      
-      // Set the first folder as selected
-      if (cachedFolders.length > 0) {
-        setSelectedFolderId(cachedFolders[0].id)
-      }
     }
     
     // Then fetch fresh data in the background
@@ -107,11 +132,6 @@ export default function DashboardPage() {
       setFolders(userFolders)
       saveFoldersToCache(userFolders)
       setIsInitialLoad(false)
-      
-      // Set the first folder as selected (usually the "Untitled" folder)
-      if (userFolders.length > 0) {
-        setSelectedFolderId(userFolders[0].id)
-      }
     } catch (error) {
       console.error('Error loading folders:', error)
       // If fetch fails and we have no cache, show error state
@@ -127,12 +147,14 @@ export default function DashboardPage() {
     if (folderName.trim()) {
       try {
         const newFolder = await folderService.createFolder({
-          name: folderName.trim()
+          name: folderName.trim(),
+          color: selectedColor
         })
         const updatedFolders = [...folders, newFolder]
         setFolders(updatedFolders)
         saveFoldersToCache(updatedFolders) // Update cache
         setFolderName('')
+        setSelectedColor(FOLDER_COLORS[0])
         setAddFolderModalOpen(false)
       } catch (error) {
         console.error('Error creating folder:', error)
@@ -143,6 +165,7 @@ export default function DashboardPage() {
 
   const handleCloseModal = () => {
     setFolderName('')
+    setSelectedColor(FOLDER_COLORS[0])
     setAddFolderModalOpen(false)
   }
 
@@ -151,6 +174,151 @@ export default function DashboardPage() {
     setNewFolderName(folder.name)
     setRenameModalOpen(true)
     setFolderMenuOpen(null)
+  }
+
+  const handleSetPicture = (folder: Folder) => {
+    setFolderToUpdatePicture(folder)
+    setPictureFile(null)
+    setPicturePreview(folder.picture_url || null)
+    setPictureModalOpen(true)
+    setFolderMenuOpen(null)
+  }
+
+  const handlePictureFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        alert('Please select an image file')
+        return
+      }
+      
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        alert('Image size must be less than 5MB')
+        return
+      }
+
+      setPictureFile(file)
+      
+      // Create preview
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setPicturePreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const uploadFolderPicture = async (file: File): Promise<string | null> => {
+    if (!user) return null
+    
+    try {
+      const fileExt = file.name.split('.').pop()
+      const fileName = `folder-${folderToUpdatePicture?.id}-${Date.now()}.${fileExt}`
+      const filePath = `folder-pictures/${fileName}`
+
+      // Try to upload to Supabase Storage
+      const { data, error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        })
+
+      if (uploadError) {
+        console.warn('Storage upload failed, using data URL:', uploadError.message)
+        
+        // Convert to data URL (only if file is small enough)
+        if (file.size < 2 * 1024 * 1024) { // 2MB limit for data URLs
+          return new Promise((resolve) => {
+            const reader = new FileReader()
+            reader.onloadend = () => resolve(reader.result as string)
+            reader.onerror = () => resolve(null)
+            reader.readAsDataURL(file)
+          })
+        } else {
+          throw new Error('File too large for data URL. Please set up Supabase Storage.')
+        }
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath)
+
+      return publicUrl
+    } catch (error: any) {
+      console.error('Error uploading folder picture:', error)
+      return null
+    }
+  }
+
+  const handleSavePicture = async () => {
+    if (!folderToUpdatePicture || !pictureFile) return
+
+    try {
+      setUploadingPicture(true)
+      const pictureUrl = await uploadFolderPicture(pictureFile)
+      
+      if (pictureUrl) {
+        const updatedFolder = await folderService.updateFolder(folderToUpdatePicture.id, {
+          picture_url: pictureUrl
+        })
+        
+        const updatedFolders = folders.map(f => 
+          f.id === folderToUpdatePicture.id ? { ...f, picture_url: updatedFolder.picture_url } : f
+        )
+        setFolders(updatedFolders)
+        saveFoldersToCache(updatedFolders)
+        
+        setPictureModalOpen(false)
+        setFolderToUpdatePicture(null)
+        setPictureFile(null)
+        setPicturePreview(null)
+      } else {
+        alert('Failed to upload picture. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error saving folder picture:', error)
+      alert('Failed to save picture. Please try again.')
+    } finally {
+      setUploadingPicture(false)
+    }
+  }
+
+  const handleRemovePicture = async () => {
+    if (!folderToUpdatePicture) return
+
+    try {
+      setUploadingPicture(true)
+      const updatedFolder = await folderService.updateFolder(folderToUpdatePicture.id, {
+        picture_url: null
+      })
+      
+      const updatedFolders = folders.map(f => 
+        f.id === folderToUpdatePicture.id ? { ...f, picture_url: null } : f
+      )
+      setFolders(updatedFolders)
+      saveFoldersToCache(updatedFolders)
+      
+      setPictureModalOpen(false)
+      setFolderToUpdatePicture(null)
+      setPictureFile(null)
+      setPicturePreview(null)
+    } catch (error) {
+      console.error('Error removing folder picture:', error)
+      alert('Failed to remove picture. Please try again.')
+    } finally {
+      setUploadingPicture(false)
+    }
+  }
+
+  const handleClosePictureModal = () => {
+    setPictureModalOpen(false)
+    setFolderToUpdatePicture(null)
+    setPictureFile(null)
+    setPicturePreview(null)
   }
 
   const handleCloseRenameModal = () => {
@@ -210,11 +378,6 @@ export default function DashboardPage() {
         localStorage.removeItem(`folder_quizzes_${folderId}_timestamp`)
         localStorage.removeItem(`folder_flashcards_${folderId}`)
         localStorage.removeItem(`folder_flashcards_${folderId}_timestamp`)
-      }
-      
-      // If we're viewing the deleted folder, redirect to dashboard
-      if (selectedFolderId === deleteConfirm.folder.id) {
-        setSelectedFolderId(null)
       }
       
       setDeleteConfirm({ folder: null })
@@ -367,22 +530,20 @@ export default function DashboardPage() {
               {/* Folders List */}
               {isInitialLoad && folders.length === 0 ? (
                 // Skeleton loading for first-time visitors
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {[1, 2, 3].map((i) => (
                     <div 
                       key={i}
-                      className="border border-slate-200 rounded-lg p-4 animate-pulse"
-                      style={{backgroundColor: '#F3F3F3'}}
+                      className="bg-white border-2 border-gray-200 rounded-lg p-6 animate-pulse"
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="h-5 bg-gray-300 rounded w-3/4 mb-3"></div>
-                          <div className="flex items-center space-x-4">
-                            <div className="h-4 bg-gray-300 rounded w-24"></div>
-                            <div className="h-4 bg-gray-300 rounded w-20"></div>
-                          </div>
-                        </div>
-                        <div className="w-6 h-6 bg-gray-300 rounded"></div>
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="w-12 h-12 bg-gray-300 rounded-lg"></div>
+                        <div className="h-4 bg-gray-300 rounded w-16"></div>
+                      </div>
+                      <div className="h-5 bg-gray-300 rounded w-3/4 mb-2"></div>
+                      <div className="flex items-center space-x-4">
+                        <div className="h-3 bg-gray-300 rounded w-20"></div>
+                        <div className="h-3 bg-gray-300 rounded w-16"></div>
                       </div>
                     </div>
                   ))}
@@ -392,75 +553,99 @@ export default function DashboardPage() {
                   <p>No folders found. Create your first folder!</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {folders.map((folder) => (
-                    <div 
+                    <button
                       key={folder.id}
-                      className={`border border-slate-200 rounded-lg p-4 hover:brightness-95 hover:shadow-sm transition-all max-w-md relative cursor-pointer overflow-visible ${
-                        selectedFolderId === folder.id ? 'ring-2 ring-primary' : ''
-                      } ${folderMenuOpen === folder.id ? 'z-[9999]' : ''}`}
-                      style={{backgroundColor: folder.color}}
                       onClick={() => router.push(`/folders/${folder.id}?name=${encodeURIComponent(folder.name)}`)}
+                      className={`border-2 border-slate-200 rounded-lg p-6 hover:brightness-95 hover:shadow-sm transition-all text-left group relative ${
+                        folderMenuOpen === folder.id ? 'z-[9999]' : ''
+                      }`}
+                      style={{ backgroundColor: folder.color }}
                     >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="font-medium text-slate-800 mb-2">{folder.name}</h3>
-                          <div className="flex items-center space-x-4 text-sm text-slate-800">
-                            <div className="flex items-center space-x-1">
-                              <svg className="w-4 h-4 text-slate-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                              </svg>
-                              <span>{folder.materials_count} Materials</span>
-                            </div>
-                            <div className="flex items-center space-x-1">
-                              <svg className="w-4 h-4 text-slate-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                              </svg>
-                              <span>{new Date(folder.created_at).toLocaleDateString()}</span>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {/* Kebab Menu */}
-                        <div className="relative z-[10000]">
-                          <button 
-                            className="folder-menu-button p-1 rounded hover:bg-gray-100 transition-colors"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setFolderMenuOpen(folderMenuOpen === folder.id ? null : folder.id)
-                            }}
-                          >
-                            <svg className="w-4 h-4 text-slate-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-                            </svg>
-                          </button>
-                          
-                          {/* Folder Menu Dropdown */}
-                          {folderMenuOpen === folder.id && (
-                            <div className="folder-menu absolute right-0 mt-1 w-32 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-[10000]">
-                              <button 
-                                className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleRenameFolder(folder)
-                                }}
-                              >
-                                Rename
-                              </button>
-                              <button 
-                                className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleDeleteFolder(folder)
-                                }}
-                              >
-                                Delete
-                              </button>
-                            </div>
+                      <div className="flex items-start justify-between mb-4">
+                        <div
+                          className="w-12 h-12 rounded-lg flex items-center justify-center text-slate-800 font-bold text-lg bg-white overflow-hidden"
+                        >
+                          {folder.picture_url ? (
+                            <img 
+                              src={folder.picture_url} 
+                              alt={folder.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            folder.name.charAt(0).toUpperCase()
                           )}
                         </div>
+                        <div className="flex items-center space-x-2">
+                          <div className="text-right">
+                            <div className="text-sm font-semibold text-slate-800 group-hover:text-primary">
+                              {folder.materials_count} items
+                            </div>
+                          </div>
+                          
+                          {/* Kebab Menu */}
+                          <div className="relative z-40">
+                            <button 
+                              className="folder-menu-button p-1 rounded hover:bg-black hover:bg-opacity-10 transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setFolderMenuOpen(folderMenuOpen === folder.id ? null : folder.id)
+                              }}
+                            >
+                              <svg className="w-4 h-4 text-slate-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                              </svg>
+                            </button>
+                            
+                            {/* Folder Menu Dropdown */}
+                            {folderMenuOpen === folder.id && (
+                              <div className="folder-menu absolute right-0 mt-1 w-40 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-40">
+                                <button 
+                                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleSetPicture(folder)
+                                  }}
+                                >
+                                  Set Picture
+                                </button>
+                                <button 
+                                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleRenameFolder(folder)
+                                  }}
+                                >
+                                  Rename
+                                </button>
+                                <button 
+                                  className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleDeleteFolder(folder)
+                                  }}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                      <h3 className="text-lg font-semibold text-slate-800 mb-2 group-hover:text-primary transition-colors">
+                        {folder.name}
+                      </h3>
+                      <div className="flex items-center text-xs text-slate-800 space-x-4">
+                        <span>
+                          {new Date(folder.updated_at).toLocaleDateString()}
+                        </span>
+                        <span>•</span>
+                        <span>
+                          {folder.materials.files} files
+                        </span>
+                      </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -485,26 +670,50 @@ export default function DashboardPage() {
             </div>
 
             {/* Modal Body */}
-            <div className="mb-6">
-              <label htmlFor="folderName" className="block text-sm font-medium text-gray-700 mb-2">
-                Folder Name
-              </label>
-              <input
-                type="text"
-                id="folderName"
-                value={folderName}
-                onChange={(e) => setFolderName(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                placeholder="Enter folder name"
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleAddFolder()
-                  } else if (e.key === 'Escape') {
-                    handleCloseModal()
-                  }
-                }}
-              />
+            <div className="mb-6 space-y-4">
+              <div>
+                <label htmlFor="folderName" className="block text-sm font-medium text-gray-700 mb-2">
+                  Folder Name
+                </label>
+                <input
+                  type="text"
+                  id="folderName"
+                  value={folderName}
+                  onChange={(e) => setFolderName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                  placeholder="Enter folder name"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleAddFolder()
+                    } else if (e.key === 'Escape') {
+                      handleCloseModal()
+                    }
+                  }}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Folder Color
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {FOLDER_COLORS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => setSelectedColor(color)}
+                      className={`w-10 h-10 rounded-lg border-2 transition-all ${
+                        selectedColor === color
+                          ? 'border-gray-800 scale-110 shadow-md'
+                          : 'border-gray-300 hover:border-gray-400'
+                      }`}
+                      style={{ backgroundColor: color }}
+                      aria-label={`Select color ${color}`}
+                    />
+                  ))}
+                </div>
+              </div>
             </div>
 
             {/* Modal Footer */}
@@ -584,6 +793,90 @@ export default function DashboardPage() {
                 className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {renaming ? 'Renaming...' : 'Rename'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Set Picture Modal */}
+      {pictureModalOpen && folderToUpdatePicture && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-bold text-gray-900">Set Folder Picture</h2>
+              <button
+                onClick={handleClosePictureModal}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                disabled={uploadingPicture}
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="mb-6 space-y-4">
+              {/* Preview */}
+              <div className="flex justify-center">
+                <div className="w-24 h-24 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden">
+                  {picturePreview ? (
+                    <img 
+                      src={picturePreview} 
+                      alt="Preview"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-gray-400 text-2xl font-bold">
+                      {folderToUpdatePicture.name.charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* File Input */}
+              <div>
+                <label htmlFor="pictureFile" className="block text-sm font-medium text-gray-700 mb-2">
+                  Upload Picture
+                </label>
+                <input
+                  type="file"
+                  id="pictureFile"
+                  accept="image/*"
+                  onChange={handlePictureFileChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                  disabled={uploadingPicture}
+                />
+                <p className="mt-1 text-xs text-gray-500">Max size: 5MB. Supported formats: JPG, PNG, GIF</p>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-end space-x-3">
+              {folderToUpdatePicture.picture_url && (
+                <button
+                  onClick={handleRemovePicture}
+                  disabled={uploadingPicture}
+                  className="px-4 py-2 border border-red-300 rounded-lg text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Remove
+                </button>
+              )}
+              <button
+                onClick={handleClosePictureModal}
+                disabled={uploadingPicture}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSavePicture}
+                disabled={!pictureFile || uploadingPicture}
+                className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {uploadingPicture ? 'Uploading...' : 'Save'}
               </button>
             </div>
           </div>
