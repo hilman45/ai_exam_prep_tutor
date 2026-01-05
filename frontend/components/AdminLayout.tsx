@@ -6,7 +6,7 @@ import { supabase, authHelpers } from '../lib/supabase'
 
 interface AdminLayoutProps {
   children: React.ReactNode
-  activeTab?: 'dashboard' | 'users' | 'analytics'
+  activeTab?: 'dashboard' | 'users' | 'analytics' | 'feedback'
   sidebarBackground?: string
   contentBackground?: string
 }
@@ -137,7 +137,8 @@ export default function AdminLayout({
     const colors = {
       dashboard: '#892CDC',
       users: '#0f5bff',
-      analytics: '#22C55E'
+      analytics: '#22C55E',
+      feedback: '#F472B6'
     }
     
     return colors[tab as keyof typeof colors] || '#892CDC'
@@ -295,6 +296,17 @@ export default function AdminLayout({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
                 {!sidebarCollapsed && <span className="text-sm text-gray-600 group-hover:text-white">Analytics</span>}
+              </div>
+
+              {/* Feedback */}
+              <div 
+                className={getNavItemClasses('feedback')}
+                onClick={() => router.push('/admin/feedback')}
+              >
+                <svg className={`${sidebarCollapsed ? 'w-6 h-6' : 'w-5 h-5'} group-hover:text-white`} style={{color: getIconColor('feedback')}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                </svg>
+                {!sidebarCollapsed && <span className="text-sm text-gray-600 group-hover:text-white">Feedback</span>}
               </div>
             </nav>
           </div>

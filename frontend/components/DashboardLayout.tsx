@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, authHelpers } from '../lib/supabase'
 import { folderService, Folder } from '../lib/folderService'
+import FeedbackModal from './FeedbackModal'
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -24,6 +25,7 @@ export default function DashboardLayout({
   const [fullName, setFullName] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false)
+  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false)
   const [myFolderOpen, setMyFolderOpen] = useState(true)
   const [recentFolders, setRecentFolders] = useState<Folder[]>([])
   const [foldersLoading, setFoldersLoading] = useState(false)
@@ -227,7 +229,19 @@ export default function DashboardLayout({
       {/* Header */}
       <header className="bg-white fixed top-0 left-64 right-0 z-20 h-16">
         <nav className="px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-end items-center h-16">
+          <div className="flex justify-end items-center h-16 gap-3">
+            {/* Feedback Button */}
+            <button
+              onClick={() => setFeedbackModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:text-primary border border-gray-300 hover:border-primary rounded-xl transition-all hover:shadow-sm group"
+              title="Submit Feedback"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+              </svg>
+              <span className="hidden sm:inline font-medium">Feedback</span>
+            </button>
+
             {/* Profile Picture/Icon with Dropdown */}
             <div className="relative">
               <button 
@@ -426,6 +440,12 @@ export default function DashboardLayout({
           {children}
         </div>
       </div>
+
+      {/* Feedback Modal */}
+      <FeedbackModal 
+        isOpen={feedbackModalOpen}
+        onClose={() => setFeedbackModalOpen(false)}
+      />
     </div>
   )
 }

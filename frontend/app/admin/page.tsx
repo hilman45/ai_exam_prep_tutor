@@ -4,16 +4,39 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { adminService, DashboardStats } from '../../lib/adminService'
 import AdminLayout from '../../components/AdminLayout'
+import { supabase } from '../../lib/supabase'
+
+interface RecentUser {
+  user_id: string
+  username: string
+  email: string
+  full_name: string | null
+  last_login?: string
+  created_at: string
+}
+
+interface RecentFeedback {
+  id: string
+  username: string
+  full_name: string
+  feedback_text: string
+  category: string
+  rating: string | null
+  status: string
+  created_at: string
+}
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [recentUsers, setRecentUsers] = useState<RecentUser[]>([])
+  const [recentFeedback, setRecentFeedback] = useState<RecentFeedback[]>([])
   const [loading, setLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
 
   useEffect(() => {
-    const checkAdminAndLoadStats = async () => {
+    const checkAdminAndLoadData = async () => {
       try {
         // First check if user is admin
         const adminStatus = await adminService.checkIsAdmin()
@@ -28,6 +51,13 @@ export default function AdminDashboardPage() {
         // Load dashboard stats
         const dashboardStats = await adminService.getDashboardStats()
         setStats(dashboardStats)
+
+        // Load recent users (last 10)
+        await loadRecentUsers()
+
+        // Load recent feedback (last 5)
+        await loadRecentFeedback()
+
         setError(null)
       } catch (err: any) {
         console.error('Error loading admin dashboard:', err)
@@ -37,8 +67,102 @@ export default function AdminDashboardPage() {
       }
     }
 
-    checkAdminAndLoadStats()
+    checkAdminAndLoadData()
   }, [])
+
+  const loadRecentUsers = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      // Get recent users from admin endpoint (ordered by created_at desc)
+      const response = await fetch(
+        `http://localhost:8000/admin/users`,
+        {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+
+      if (response.ok) {
+        const users = await response.json()
+        // Sort by created_at descending and take first 10
+        const sortedUsers = users
+          .sort((a: RecentUser, b: RecentUser) => 
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          )
+          .slice(0, 10)
+        setRecentUsers(sortedUsers)
+      }
+    } catch (err) {
+      console.error('Error loading recent users:', err)
+    }
+  }
+
+  const loadRecentFeedback = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      // Get recent feedback (ordered by created_at desc)
+      const response = await fetch(
+        `http://localhost:8000/feedback/admin/all`,
+        {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+
+      if (response.ok) {
+        const feedback = await response.json()
+        // Take first 5 feedback items (already sorted by created_at desc from backend)
+        setRecentFeedback(feedback.slice(0, 5))
+      }
+    } catch (err) {
+      console.error('Error loading recent feedback:', err)
+    }
+  }
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
+  const getCategoryLabel = (category: string) => {
+    const labels: { [key: string]: string } = {
+      bugs: '🐛 Bugs',
+      feature_request: '💡 Feature Request',
+      uploading_files: '📤 Uploading Files',
+      notes_ai: '📝 Notes AI',
+      flashcards_ai: '🃏 Flashcards AI',
+      quizfetch: '🎯 QuizFetch'
+    }
+    return labels[category] || category
+  }
+
+  const getStatusBadge = (status: string) => {
+    const badges: { [key: string]: { label: string; color: string } } = {
+      pending: { label: 'Pending', color: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
+      reviewed: { label: 'Reviewed', color: 'bg-blue-100 text-blue-800 border-blue-200' },
+      resolved: { label: 'Resolved', color: 'bg-green-100 text-green-800 border-green-200' }
+    }
+    const badge = badges[status] || { label: status, color: 'bg-gray-100 text-gray-800 border-gray-200' }
+    return (
+      <span className={`px-2 py-1 rounded-lg text-xs font-medium border ${badge.color}`}>
+        {badge.label}
+      </span>
+    )
+  }
 
   if (loading) {
     return (
@@ -91,42 +215,6 @@ export default function AdminDashboardPage() {
       borderColor: 'border-blue-200'
     },
     {
-      title: 'Total Quizzes Taken',
-      value: stats?.total_quizzes_taken || 0,
-      icon: (
-        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-        </svg>
-      ),
-      bgColor: 'bg-yellow-50',
-      iconColor: 'text-yellow-600',
-      borderColor: 'border-yellow-200'
-    },
-    {
-      title: 'Total Flashcards Reviewed',
-      value: stats?.total_flashcards_reviewed || 0,
-      icon: (
-        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-        </svg>
-      ),
-      bgColor: 'bg-red-50',
-      iconColor: 'text-red-600',
-      borderColor: 'border-red-200'
-    },
-    {
-      title: 'Total Notes Generated',
-      value: stats?.total_notes_generated || 0,
-      icon: (
-        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-      ),
-      bgColor: 'bg-cyan-50',
-      iconColor: 'text-cyan-600',
-      borderColor: 'border-cyan-200'
-    },
-    {
       title: 'Total AI Chat Interactions',
       value: stats?.total_ai_chat_interactions || 0,
       icon: (
@@ -154,34 +242,145 @@ export default function AdminDashboardPage() {
 
   return (
     <AdminLayout activeTab="dashboard">
-      <div className="p-6">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">Admin Dashboard</h1>
-          <p className="text-gray-600">System overview and usage statistics</p>
-        </div>
+      <div className="min-h-screen bg-gray-50 p-8">
+        <div className="max-w-7xl mx-auto">
+          {/* Header */}
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-dark mb-2">Admin Dashboard</h1>
+            <p className="text-gray-600">System overview and quick insights</p>
+          </div>
 
-        {/* Stats Cards Grid - Smaller cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {statCards.map((card, index) => (
-            <div
-              key={index}
-              className={`bg-white rounded-lg border-2 ${card.borderColor} p-4 transition-all duration-200 hover:scale-105 hover:shadow-md`}
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className={`${card.bgColor} p-2 rounded-lg ${card.iconColor}`}>
-                  <div className="w-6 h-6">
+          {/* Stats Cards Grid - Only 3 cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            {statCards.map((card, index) => (
+              <div
+                key={index}
+                className={`bg-white rounded-xl border-2 ${card.borderColor} p-6 transition-all duration-200 hover:scale-105 hover:shadow-lg`}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div className={`${card.bgColor} p-3 rounded-xl ${card.iconColor}`}>
                     {card.icon}
                   </div>
                 </div>
+                <h3 className="text-sm font-medium text-gray-600 mb-2">{card.title}</h3>
+                <p className="text-3xl font-bold text-gray-800">{card.value.toLocaleString()}</p>
               </div>
-              <h3 className="text-xs font-medium text-gray-600 mb-1">{card.title}</h3>
-              <p className="text-2xl font-bold text-gray-800">{card.value.toLocaleString()}</p>
+            ))}
+          </div>
+
+          {/* Tables Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Recent Users Table */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-bold text-dark">Recent Users</h2>
+                  <button
+                    onClick={() => router.push('/admin/users')}
+                    className="text-sm text-primary hover:text-purple-700 font-medium"
+                  >
+                    View All →
+                  </button>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Joined</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {recentUsers.length === 0 ? (
+                      <tr>
+                        <td colSpan={2} className="px-6 py-8 text-center text-gray-500">
+                          No users found
+                        </td>
+                      </tr>
+                    ) : (
+                      recentUsers.map((user) => (
+                        <tr key={user.user_id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="flex-shrink-0 h-10 w-10 rounded-full bg-primary flex items-center justify-center text-white font-semibold">
+                                {(user.full_name || user.username || user.email || 'U')[0].toUpperCase()}
+                              </div>
+                              <div className="ml-4">
+                                <div className="text-sm font-medium text-gray-900">
+                                  {user.full_name || user.username || 'Unknown'}
+                                </div>
+                                <div className="text-sm text-gray-500">@{user.username || 'N/A'}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {formatDate(user.created_at)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          ))}
+
+            {/* Recent Feedback Table */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-bold text-dark">Recent Feedback</h2>
+                  <button
+                    onClick={() => router.push('/admin/feedback')}
+                    className="text-sm text-primary hover:text-purple-700 font-medium"
+                  >
+                    View All →
+                  </button>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {recentFeedback.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="px-6 py-8 text-center text-gray-500">
+                          No feedback found
+                        </td>
+                      </tr>
+                    ) : (
+                      recentFeedback.map((feedback) => (
+                        <tr key={feedback.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="text-sm font-medium text-gray-900">
+                              {feedback.full_name || feedback.username || 'Unknown'}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1 line-clamp-1">
+                              {feedback.feedback_text.substring(0, 50)}...
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                            {getCategoryLabel(feedback.category)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {getStatusBadge(feedback.status)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </AdminLayout>
   )
 }
-
