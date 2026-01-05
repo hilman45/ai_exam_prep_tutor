@@ -245,44 +245,45 @@ export default function NotesGeneratorPage() {
               )}
 
               {/* Modal Body */}
-              <div className="space-y-4 mb-6">
+              <div className="space-y-6 mb-8">
                 {/* Folder Dropdown */}
                 <div>
-                  <label className="block text-sm font-bold text-gray-900 mb-2">
-                    Folder:
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Folder
                   </label>
                   <div className="relative">
                     <button
-                      className="folder-dropdown-button w-full px-3 py-2 border border-black rounded-lg text-left flex items-center justify-between hover:bg-gray-50 transition-colors"
+                      className="folder-dropdown-button w-full px-4 py-3 border border-gray-200 rounded-xl text-left flex items-center justify-between hover:border-primary/50 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all bg-gray-50/50"
                       onClick={() => setFolderDropdownOpen(!folderDropdownOpen)}
                     >
-                      <span className="text-gray-900">{selectedFolder}</span>
-                      <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <span className="text-gray-900 font-medium">{selectedFolder}</span>
+                      <svg className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${folderDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                       </svg>
                     </button>
                     
                     {folderDropdownOpen && (
-                      <div className="folder-dropdown absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50">
+                      <div className="folder-dropdown absolute top-full left-0 right-0 mt-2 bg-white border border-gray-100 rounded-xl shadow-xl z-50 max-h-60 overflow-y-auto">
                         {foldersLoading ? (
-                          <div className="px-3 py-2 text-sm text-gray-500">
+                          <div className="px-4 py-3 text-sm text-gray-500">
                             Loading folders...
                           </div>
                         ) : folders.length === 0 ? (
-                          <div className="px-3 py-2 text-sm text-gray-500">
+                          <div className="px-4 py-3 text-sm text-gray-500">
                             No folders found
                           </div>
                         ) : (
                           folders.map((folder) => (
                             <button
                               key={folder.id}
-                              className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors first:rounded-t-lg last:rounded-b-lg"
+                              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 hover:text-primary transition-colors flex items-center space-x-2"
                               onClick={() => {
                                 setSelectedFolder(folder.name)
                                 setFolderDropdownOpen(false)
                               }}
                             >
-                              {folder.name}
+                              <span className="w-2 h-2 rounded-full bg-primary/40"></span>
+                              <span>{folder.name}</span>
                             </button>
                           ))
                         )}
@@ -293,53 +294,64 @@ export default function NotesGeneratorPage() {
 
                 {/* Name Input */}
                 <div>
-                  <label className="block text-sm font-bold text-gray-900 mb-2">
-                    Name:
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Note Name
                   </label>
                   <input
                     type="text"
                     value={notesName}
                     onChange={(e) => setNotesName(e.target.value)}
-                    className="w-full px-3 py-2 border border-black rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                    placeholder="Enter notes name"
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50/50 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-gray-400 font-medium"
+                    placeholder="e.g., Biology Chapter 1"
                   />
                 </div>
 
                 {/* Notes Type Dropdown */}
                 <div>
-                  <label className="block text-sm font-bold text-gray-900 mb-2">
-                    Notes Type:
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Format Type
                   </label>
                   <div className="relative">
                     <button
-                      className="notes-type-dropdown-button w-full px-3 py-2 border border-black rounded-lg text-left flex items-center justify-between hover:bg-gray-50 transition-colors"
+                      className="notes-type-dropdown-button w-full px-4 py-3 border border-gray-200 rounded-xl text-left flex items-center justify-between hover:border-primary/50 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all bg-gray-50/50"
                       onClick={() => setNotesTypeDropdownOpen(!notesTypeDropdownOpen)}
                     >
-                      <span className="text-gray-900">{notesType}</span>
-                      <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="flex items-center space-x-2">
+                        <span className="p-1 rounded-md bg-primary/10 text-primary">
+                            {notesType === 'Bullet Points' ? (
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+                            ) : (
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
+                            )}
+                        </span>
+                        <span className="text-gray-900 font-medium">{notesType}</span>
+                      </div>
+                      <svg className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${notesTypeDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                       </svg>
                     </button>
                     
                     {notesTypeDropdownOpen && (
-                      <div className="notes-type-dropdown absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50">
+                      <div className="notes-type-dropdown absolute top-full left-0 right-0 mt-2 bg-white border border-gray-100 rounded-xl shadow-xl z-50 overflow-hidden">
                         <button
-                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors rounded-t-lg"
+                          className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 hover:text-primary transition-colors flex items-center space-x-2"
                           onClick={() => {
                             setNotesType('Short Summary')
                             setNotesTypeDropdownOpen(false)
                           }}
                         >
-                          Short Summary
+                          <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
+                          <span>Short Summary</span>
                         </button>
                         <button
-                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors rounded-b-lg"
+                          className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 hover:text-primary transition-colors flex items-center space-x-2"
                           onClick={() => {
                             setNotesType('Bullet Points')
                             setNotesTypeDropdownOpen(false)
                           }}
                         >
-                          Bullet Points
+                          <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+                          <span>Bullet Points</span>
                         </button>
                       </div>
                     )}
@@ -348,22 +360,22 @@ export default function NotesGeneratorPage() {
               </div>
 
               {/* Modal Footer */}
-              <div className="flex justify-end space-x-3">
+              <div className="flex justify-end space-x-3 pt-2 border-t border-gray-100">
                 <button
                   onClick={handleCloseModal}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                  className="px-6 py-2.5 border border-gray-200 rounded-xl text-gray-600 font-medium hover:bg-gray-50 hover:text-gray-900 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleGenerate}
                   disabled={isGenerating}
-                  className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                  className="px-6 py-2.5 bg-primary text-white rounded-xl font-medium hover:bg-purple-700 shadow-lg shadow-primary/25 transition-all hover:shadow-xl hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none flex items-center space-x-2"
                 >
                   {isGenerating && (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                   )}
-                  <span>{isGenerating ? 'Generating...' : 'Generate'}</span>
+                  <span>{isGenerating ? 'Generating...' : 'Generate Notes'}</span>
                 </button>
               </div>
             </div>

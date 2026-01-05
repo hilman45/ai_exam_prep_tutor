@@ -16,7 +16,7 @@ interface DashboardLayoutProps {
 export default function DashboardLayout({ 
   children, 
   activeTab = 'home',
-  sidebarBackground = 'bg-white',
+  sidebarBackground = 'bg-gray-50/50',
   contentBackground = 'bg-white'
 }: DashboardLayoutProps) {
   const [user, setUser] = useState<any>(null)
@@ -183,13 +183,18 @@ export default function DashboardLayout({
   }, [])
 
   const getNavItemClasses = (tab: string) => {
-    const baseClasses = "flex items-center space-x-3 py-2 px-3 rounded-lg transition-colors cursor-pointer group"
-    // Only show color on hover, not when active
-    return `${baseClasses} hover:bg-primary hover:text-white`
+    const isActive = activeTab === tab
+    return `flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all cursor-pointer group mb-1 ${
+      isActive 
+        ? 'bg-primary text-white shadow-md' 
+        : 'text-gray-600 hover:bg-gray-100 hover:text-dark'
+    }`
   }
 
   const getIconColor = (tab: string) => {
-    // Always return the default color, not white when active
+    if (activeTab === tab) return 'currentColor' // White when active
+    
+    // Default colors when inactive
     const colors = {
       home: '#7C3AED',
       notes: '#06B6D4',
@@ -227,16 +232,16 @@ export default function DashboardLayout({
   return (
     <div className="min-h-screen bg-white font-space-grotesk">
       {/* Header */}
-      <header className="bg-white fixed top-0 left-64 right-0 z-20 h-16">
+      <header className="bg-white/80 backdrop-blur-md fixed top-0 left-64 right-0 z-20 h-16">
         <nav className="px-4 sm:px-6 lg:px-8">
           <div className="flex justify-end items-center h-16 gap-3">
             {/* Feedback Button */}
             <button
               onClick={() => setFeedbackModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:text-primary border border-gray-300 hover:border-primary rounded-xl transition-all hover:shadow-sm group"
+              className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:text-primary border border-gray-200 hover:border-primary rounded-xl transition-all hover:shadow-sm bg-white"
               title="Submit Feedback"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
               </svg>
               <span className="hidden sm:inline font-medium">Feedback</span>
@@ -245,7 +250,7 @@ export default function DashboardLayout({
             {/* Profile Picture/Icon with Dropdown */}
             <div className="relative">
               <button 
-                className="profile-button w-10 h-10 rounded-full border-2 border-gray-300 flex items-center justify-center hover:border-primary transition-colors overflow-hidden"
+                className="profile-button w-10 h-10 rounded-full border-2 border-gray-200 flex items-center justify-center hover:border-primary transition-all overflow-hidden shadow-sm"
                 onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
               >
                 {profilePicture ? (
@@ -263,23 +268,29 @@ export default function DashboardLayout({
               
               {/* Profile Dropdown */}
               {profileDropdownOpen && (
-                <div className="profile-dropdown absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                <div className="profile-dropdown absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-100 py-2 z-50 animate-fadeIn">
+                  <div className="px-4 py-2 border-b border-gray-100 mb-1">
+                    <p className="text-sm font-bold text-gray-900 truncate">{fullName || 'User'}</p>
+                    <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                  </div>
                   <button 
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-primary transition-colors flex items-center gap-2"
                     onClick={() => {
                       setProfileDropdownOpen(false)
                       router.push('/profile')
                     }}
                   >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                     My Profile
                   </button>
                   <button 
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                    className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
                     onClick={() => {
                       setProfileDropdownOpen(false)
                       handleSignOut()
                     }}
                   >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
                     Logout
                   </button>
                 </div>
@@ -292,10 +303,11 @@ export default function DashboardLayout({
       {/* Main Layout */}
       <div className="flex min-h-screen pt-16">
         {/* Sidebar */}
-        <div className={`${sidebarBackground} border-r border-gray-200 flex flex-col w-64 fixed top-3 bottom-0 z-10`}>
-          <div className="p-3 flex flex-col flex-1">
+        <div className={`${sidebarBackground} border-r border-gray-200 flex flex-col w-64 fixed top-0 bottom-0 z-30 pt-4`}>
+          <div className="px-6 pb-6 flex flex-col h-full">
             {/* Logo */}
-            <div className="mb-3">
+            <div className="mb-8 flex items-center gap-2">
+              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white font-bold text-xl">P</div>
               <h1 className="text-2xl font-bold text-dark">
                 <span className="text-black">Prep</span>
                 <span className="text-primary">Wise</span>
@@ -304,15 +316,19 @@ export default function DashboardLayout({
             
             {/* Navigation */}
             <nav className="space-y-1">
+              <div className="px-3 mb-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                Menu
+              </div>
+              
               {/* Home */}
               <div 
                 className={getNavItemClasses('home')}
                 onClick={() => router.push('/dashboard')}
               >
-                <svg className="w-5 h-5 group-hover:text-white" style={{color: getIconColor('home')}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className={`w-5 h-5 transition-colors ${activeTab === 'home' ? 'text-white' : ''}`} style={{color: activeTab !== 'home' ? getIconColor('home') : undefined}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                 </svg>
-                <span className="text-sm text-gray-600 group-hover:text-white">Home</span>
+                <span className="font-medium text-sm">Dashboard</span>
               </div>
 
               {/* Notes */}
@@ -320,18 +336,21 @@ export default function DashboardLayout({
                 className={getNavItemClasses('notes')}
                 onClick={() => router.push('/notes-generator')}
               >
-                <svg className="w-5 h-5 group-hover:text-white" style={{color: getIconColor('notes')}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className={`w-5 h-5 transition-colors ${activeTab === 'notes' ? 'text-white' : ''}`} style={{color: activeTab !== 'notes' ? getIconColor('notes') : undefined}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <span className="text-sm text-gray-600 group-hover:text-white">Notes</span>
+                <span className="font-medium text-sm">Notes</span>
               </div>
 
               {/* Quiz */}
-              <div className={getNavItemClasses('quiz')}>
-                <svg className="w-5 h-5 group-hover:text-white" style={{color: getIconColor('quiz')}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div 
+                className={getNavItemClasses('quiz')}
+                onClick={() => router.push('/quiz-generator')}
+              >
+                <svg className={`w-5 h-5 transition-colors ${activeTab === 'quiz' ? 'text-white' : ''}`} style={{color: activeTab !== 'quiz' ? getIconColor('quiz') : undefined}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                 </svg>
-                <span className="text-sm text-gray-600 group-hover:text-white">Quiz</span>
+                <span className="font-medium text-sm">Quiz</span>
               </div>
 
               {/* Flashcards */}
@@ -339,21 +358,41 @@ export default function DashboardLayout({
                 className={getNavItemClasses('flashcards')}
                 onClick={() => router.push('/flashcard-generator')}
               >
-                <svg className="w-5 h-5 group-hover:text-white" style={{color: getIconColor('flashcards')}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className={`w-5 h-5 transition-colors ${activeTab === 'flashcards' ? 'text-white' : ''}`} style={{color: activeTab !== 'flashcards' ? getIconColor('flashcards') : undefined}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                 </svg>
-                <span className="text-sm text-gray-600 group-hover:text-white">Flashcards</span>
+                <span className="font-medium text-sm">Flashcards</span>
+              </div>
+
+              {/* Analytics */}
+              <div 
+                className={getNavItemClasses('analytics')}
+                onClick={() => router.push('/analytics')}
+              >
+                <svg className={`w-5 h-5 transition-colors ${activeTab === 'analytics' ? 'text-white' : ''}`} style={{color: activeTab !== 'analytics' ? getIconColor('analytics') : undefined}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span className="font-medium text-sm">Analytics</span>
+              </div>
+
+              <div className="pt-4 px-3 mb-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                Library
               </div>
 
               {/* My Folder Section */}
-              <div className="mt-1">
+              <div className="mb-2">
                 <button
                   onClick={() => setMyFolderOpen(!myFolderOpen)}
-                  className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
+                  className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors group"
                 >
-                  <span>My Folder</span>
+                  <div className="flex items-center gap-3">
+                    <svg className="w-5 h-5 text-gray-400 group-hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                    </svg>
+                    <span className="font-medium">My Folders</span>
+                  </div>
                   <svg
-                    className={`w-4 h-4 transition-transform ${myFolderOpen ? 'rotate-180' : ''}`}
+                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${myFolderOpen ? 'rotate-180' : ''}`}
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -362,9 +401,9 @@ export default function DashboardLayout({
                   </svg>
                 </button>
                 {myFolderOpen && (
-                  <div className="ml-2 mt-1 space-y-0.5">
+                  <div className="ml-10 mt-1 space-y-1 border-l-2 border-gray-200 pl-2">
                     {foldersLoading ? (
-                      <div className="px-3 py-1.5 text-xs text-gray-500">Loading...</div>
+                      <div className="px-3 py-2 text-xs text-gray-400">Loading...</div>
                     ) : recentFolders.length > 0 ? (
                       recentFolders.map((folder) => (
                         <button
@@ -372,65 +411,40 @@ export default function DashboardLayout({
                           onClick={() => {
                             router.push(`/folders/${folder.id}`)
                           }}
-                          className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-100 rounded-lg transition-colors flex items-center space-x-2"
+                          className="w-full text-left px-3 py-2 text-sm text-gray-600 hover:text-dark hover:bg-gray-100 rounded-md transition-colors flex items-center gap-2 truncate"
                         >
                           <div
-                            className="w-3 h-3 rounded"
+                            className="w-2 h-2 rounded-full flex-shrink-0"
                             style={{ backgroundColor: folder.color }}
                           />
                           <span className="truncate">{folder.name}</span>
                         </button>
                       ))
                     ) : (
-                      <div className="px-3 py-1.5 text-xs text-gray-500">No recent folders</div>
+                      <div className="px-3 py-2 text-xs text-gray-400">No recent folders</div>
                     )}
                     <button
                       onClick={() => router.push('/my-folders')}
-                      className="w-full text-left px-3 py-1.5 text-xs text-primary hover:bg-primary hover:text-white rounded-lg transition-colors font-medium"
+                      className="w-full text-left px-3 py-2 text-xs text-primary hover:text-purple-700 font-medium transition-colors mt-1"
                     >
-                      See All
+                      + View All Folders
                     </button>
                   </div>
                 )}
               </div>
             </nav>
 
-            {/* Bottom Navigation */}
-            <div className="mt-4 space-y-1">
-              {/* Analytics */}
-              <div 
-                className={getNavItemClasses('analytics')}
-                onClick={() => router.push('/analytics')}
-              >
-                <svg className="w-5 h-5 group-hover:text-white" style={{color: getIconColor('analytics')}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-                <span className="text-sm text-gray-600 group-hover:text-white">Analytic Tracking</span>
-              </div>
-
-              {/* Profile */}
-              <div 
-                className={getNavItemClasses('profile')}
-                onClick={() => router.push('/profile')}
-              >
-                <svg className="w-5 h-5 group-hover:text-white" style={{color: getIconColor('profile')}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-                <span className="text-sm text-gray-600 group-hover:text-white">Profile</span>
-              </div>
-            </div>
-
             {/* Documentation Button at Bottom */}
-            <div className="mt-auto pt-3">
-              <button
-                onClick={() => router.push('/docs')}
-                className="w-full flex items-center justify-center space-x-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors font-medium text-sm"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-                <span>Documentation</span>
-              </button>
+            <div className="mt-auto pt-6 border-t border-gray-200">
+                <button
+                    onClick={() => router.push('/docs')}
+                    className="w-full flex items-center space-x-3 px-3 py-2.5 text-gray-600 hover:bg-gray-100 hover:text-dark rounded-lg transition-colors"
+                >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                    <span className="font-medium text-sm">Documentation</span>
+                </button>
             </div>
           </div>
         </div>
