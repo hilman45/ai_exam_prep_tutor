@@ -501,7 +501,7 @@ export default function MyFoldersPage() {
                 <button
                   key={folder.id}
                   onClick={() => handleFolderClick(folder.id)}
-                  className={`border-2 border-slate-200 rounded-lg p-6 hover:brightness-95 hover:shadow-sm transition-all text-left group relative ${
+                  className={`border-2 border-slate-200 rounded-lg p-6 hover:brightness-95 hover:shadow-sm transition-all text-left group relative overflow-visible ${
                     folderMenuOpen === folder.id ? 'z-[9999]' : ''
                   }`}
                   style={{ backgroundColor: folder.color }}
@@ -543,7 +543,7 @@ export default function MyFoldersPage() {
                         
                         {/* Folder Menu Dropdown */}
                         {folderMenuOpen === folder.id && (
-                          <div className="folder-menu absolute right-0 mt-1 w-40 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-40">
+                          <div className="folder-menu absolute right-0 mt-1 w-40 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-[100]">
                             <button 
                               className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
                               onClick={(e) => {

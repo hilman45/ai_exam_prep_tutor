@@ -1,5 +1,12 @@
 import type { Metadata } from 'next'
+import { Poppins } from 'next/font/google'
 import '../styles/globals.css'
+
+const poppins = Poppins({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700'],
+  variable: '--font-poppins',
+})
 
 export const metadata: Metadata = {
   title: 'PrepWise - AI Study Partner',
@@ -13,7 +20,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="font-space-grotesk">{children}</body>
+      <body className={`${poppins.variable} font-poppins`}>{children}</body>
     </html>
   )
 }

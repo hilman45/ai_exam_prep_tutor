@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase, authHelpers } from '../lib/supabase'
 import { folderService, Folder } from '../lib/folderService'
@@ -303,15 +304,13 @@ export default function DashboardLayout({
       {/* Main Layout */}
       <div className="flex min-h-screen pt-16">
         {/* Sidebar */}
-        <div className={`${sidebarBackground} border-r border-gray-200 flex flex-col w-64 fixed top-0 bottom-0 z-30 pt-4`}>
+        <div className={`${sidebarBackground} border-r border-gray-200 flex flex-col w-64 fixed top-0 bottom-0 z-30 pt-2`}>
           <div className="px-6 pb-6 flex flex-col h-full">
             {/* Logo */}
-            <div className="mb-8 flex items-center gap-2">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white font-bold text-xl">P</div>
-              <h1 className="text-2xl font-bold text-dark">
-                <span className="text-black">Prep</span>
-                <span className="text-primary">Wise</span>
-              </h1>
+            <div className="mb-6 flex items-center gap-2">
+              <Link href="/dashboard" className="flex items-center gap-2">
+                <img src="/logo.svg" alt="PrepWise" width={180} height={50} className="w-[180px] h-[50px] object-contain" />
+              </Link>
             </div>
             
             {/* Navigation */}

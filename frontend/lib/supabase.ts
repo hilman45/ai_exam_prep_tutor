@@ -156,6 +156,42 @@ export const authHelpers = {
       localStorage.removeItem('supabase_access_token')
       localStorage.removeItem('supabase_refresh_token')
     }
+  },
+
+  // Send password reset email
+  async resetPasswordForEmail(email: string) {
+    try {
+      const redirectTo = typeof window !== 'undefined'
+        ? `${window.location.origin}/reset-password`
+        : 'http://localhost:3000/reset-password'
+
+      const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo,
+      })
+
+      if (error) {
+        throw error
+      }
+      return { data, error: null }
+    } catch (error) {
+      return { data: null, error }
+    }
+  },
+
+  // Update password (used after clicking the reset link)
+  async updatePassword(newPassword: string) {
+    try {
+      const { data, error } = await supabase.auth.updateUser({
+        password: newPassword,
+      })
+
+      if (error) {
+        throw error
+      }
+      return { data, error: null }
+    } catch (error) {
+      return { data: null, error }
+    }
   }
 }
 

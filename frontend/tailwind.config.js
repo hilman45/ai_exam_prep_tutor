@@ -8,7 +8,10 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        'space-grotesk': ['Space Grotesk', 'sans-serif'],
+        'space-grotesk': ['var(--font-poppins)', 'sans-serif'],
+        'inter': ['var(--font-poppins)', 'sans-serif'],
+        'poppins': ['var(--font-poppins)', 'sans-serif'],
+        'sans': ['var(--font-poppins)', 'sans-serif'], // Set as default sans
       },
       colors: {
         primary: '#892CDC',

@@ -17,7 +17,6 @@ interface GeneratedNotesData {
   createdAt: string
 }
 
-
 export default function NotesPage() {
   const [notesData, setNotesData] = useState<GeneratedNotesData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -158,10 +157,10 @@ export default function NotesPage() {
   if (loading) {
     return (
       <DashboardLayout activeTab="notes">
-        <div className="p-6 flex items-center justify-center min-h-96">
+        <div className="flex items-center justify-center min-h-[calc(100vh-4rem)]">
           <div className="text-center">
-            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading notes...</p>
+            <div className="w-10 h-10 border-3 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-gray-500 font-medium">Loading your notes...</p>
           </div>
         </div>
       </DashboardLayout>
@@ -171,22 +170,22 @@ export default function NotesPage() {
   if (!notesData) {
     return (
       <DashboardLayout activeTab="notes">
-        <div className="p-6 text-center min-h-96">
-          {error ? (
-            <div>
-              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-red-600">{error}</p>
-              </div>
-              <button
-                onClick={() => router.push('/notes-generator')}
-                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors"
-              >
-                Generate New Notes
-              </button>
+        <div className="flex items-center justify-center min-h-[calc(100vh-4rem)] p-6">
+          <div className="text-center max-w-md w-full bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
+            <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
             </div>
-          ) : (
-            <p className="text-gray-600">No notes found. Redirecting...</p>
-          )}
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Something went wrong</h3>
+            <p className="text-gray-600 mb-6">{error || 'No notes found.'}</p>
+            <button
+              onClick={() => router.push('/notes-generator')}
+              className="w-full px-4 py-2.5 bg-primary text-white rounded-xl hover:bg-opacity-90 transition-all font-medium shadow-sm hover:shadow-md"
+            >
+              Generate New Notes
+            </button>
+          </div>
         </div>
       </DashboardLayout>
     )
@@ -194,42 +193,56 @@ export default function NotesPage() {
 
   return (
     <DashboardLayout activeTab="notes">
-      <div className="p-6">
-        {/* Header Section */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-3">
+      <div className="min-h-screen bg-gray-50/50 pb-20">
+        {/* Top Navigation Bar */}
+        <div className="sticky top-16 z-10 bg-white/80 backdrop-blur-md border-b border-gray-200 px-6 py-4">
+          <div className="max-w-5xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-4">
               <button
                 onClick={handleBackToFolders}
-                className="text-gray-600 hover:text-gray-800 transition-colors"
+                className="p-2 -ml-2 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-all"
+                title="Back to Folder"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
               </button>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-800">{notesData.notesName}</h1>
-                <p className="text-sm text-gray-600">in {notesData.folderName}</p>
+              
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2 text-sm text-gray-500 mb-0.5">
+                  <span>Folders</span>
+                  <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                  <span className="font-medium text-gray-700">{notesData.folderName}</span>
+                </div>
+                <h1 className="text-xl font-bold text-gray-900 leading-none">{notesData.notesName}</h1>
               </div>
             </div>
-            
-            <div className="flex items-center space-x-3">
+
+            <div className="flex items-center gap-3">
               {!isEditing ? (
                 <button
                   onClick={handleEdit}
-                  className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors flex items-center space-x-2"
+                  className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-all shadow-sm hover:shadow flex items-center gap-2 font-medium"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                   </svg>
-                  <span>Edit</span>
+                  Edit Notes
                 </button>
               ) : (
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleCancel}
+                    className="px-4 py-2 text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                  >
+                    Cancel
+                  </button>
                   <button
                     onClick={handleSave}
                     disabled={isSaving}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all shadow-sm hover:shadow flex items-center gap-2 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isSaving ? (
                       <>
@@ -241,70 +254,67 @@ export default function NotesPage() {
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
-                        <span>Save</span>
+                        <span>Save Changes</span>
                       </>
                     )}
                   </button>
-                  <button
-                    onClick={handleCancel}
-                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
                 </div>
               )}
-              
-            </div>
-          </div>
-          
-          {/* File Info */}
-          <div className="bg-gray-50 rounded-lg p-4 mb-6">
-            <div className="flex items-center space-x-4 text-sm text-gray-600">
-              <div className="flex items-center space-x-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <span>Source: {notesData.filename}</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span>Generated: {notesData.createdAt ? new Date(notesData.createdAt).toLocaleString() : 'Unknown'}</span>
-              </div>
             </div>
           </div>
         </div>
 
-        {/* Error Message */}
-        {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-600">{error}</p>
-          </div>
-        )}
+        {/* Main Content Area */}
+        <div className="max-w-5xl mx-auto px-6 py-8">
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3">
+              <svg className="w-5 h-5 text-red-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-red-700 font-medium">{error}</p>
+            </div>
+          )}
 
-        {/* Notes Content Area */}
-        <div className="bg-white border border-gray-200 rounded-lg">
-          <div className="p-6">
-            {isEditing ? (
-              <textarea
-                value={editedContent}
-                onChange={(e) => setEditedContent(e.target.value)}
-                className="w-full min-h-96 p-4 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary resize-none"
-                placeholder="Start editing your notes..."
-              />
-            ) : (
-              <div className="min-h-96 p-4 border border-gray-200 rounded-lg bg-white">
-                <div className="prose max-w-none">
+          <div className={`bg-white rounded-2xl shadow-sm border border-gray-200 transition-all duration-300 ${isEditing ? 'ring-2 ring-primary/10 shadow-md' : ''}`}>
+            {/* Metadata Header */}
+            <div className="px-8 py-4 border-b border-gray-100 flex flex-wrap items-center gap-6 text-sm text-gray-500 bg-gray-50/30 rounded-t-2xl">
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span className="font-medium">Source:</span>
+                <span className="text-gray-700">{notesData.filename}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span className="font-medium">Created:</span>
+                <span className="text-gray-700">{new Date(notesData.createdAt).toLocaleDateString()}</span>
+              </div>
+            </div>
+
+            {/* Content Editor/Viewer */}
+            <div className="p-8 min-h-[60vh]">
+              {isEditing ? (
+                <textarea
+                  value={editedContent}
+                  onChange={(e) => setEditedContent(e.target.value)}
+                  className="w-full h-full min-h-[60vh] p-0 border-0 focus:ring-0 text-gray-800 leading-relaxed resize-none text-lg font-normal placeholder-gray-300"
+                  placeholder="Start writing your notes here..."
+                  spellCheck={false}
+                />
+              ) : (
+                <div className="prose prose-slate max-w-none lg:prose-lg prose-headings:font-bold prose-h1:text-3xl prose-h2:text-2xl prose-p:text-gray-700 prose-a:text-primary hover:prose-a:text-primary/80 prose-img:rounded-xl">
                   <div 
-                    className="whitespace-pre-wrap text-gray-800 leading-relaxed"
+                    className="whitespace-pre-wrap"
                     style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
                   >
                     {editedContent}
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -325,24 +335,27 @@ export default function NotesPage() {
       {/* Preview Modal for AI Generated Notes */}
       {showPreviewModal && aiGeneratedNotes && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-all"
           onClick={() => {
             setAiGeneratedNotes(null)
             setShowPreviewModal(false)
           }}
         >
           <div 
-            className="bg-white rounded-lg p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-xl"
+            className="bg-white rounded-2xl p-0 max-w-4xl w-full max-h-[90vh] overflow-hidden shadow-2xl flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-900">Preview AI-Generated Notes</h3>
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">Review AI Suggestions</h3>
+                <p className="text-sm text-gray-500">The AI has generated an updated version of your notes.</p>
+              </div>
               <button
                 onClick={() => {
                   setAiGeneratedNotes(null)
                   setShowPreviewModal(false)
                 }}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -350,32 +363,28 @@ export default function NotesPage() {
               </button>
             </div>
 
-            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm text-blue-800">
-                Updated notes content generated. Choose how you'd like to apply it:
-              </p>
-            </div>
-
-            <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg max-h-[400px] overflow-y-auto">
-              <div className="prose max-w-none">
-                <div 
-                  className="whitespace-pre-wrap text-gray-800 leading-relaxed"
-                  style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
-                >
-                  {aiGeneratedNotes}
+            <div className="flex-1 overflow-y-auto p-6 bg-gray-50/30">
+              <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                <div className="prose max-w-none">
+                  <div 
+                    className="whitespace-pre-wrap text-gray-800 leading-relaxed"
+                    style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
+                  >
+                    {aiGeneratedNotes}
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="flex justify-end space-x-3">
+            <div className="px-6 py-4 border-t border-gray-100 bg-white flex justify-end gap-3">
               <button
                 onClick={() => {
                   setAiGeneratedNotes(null)
                   setShowPreviewModal(false)
                 }}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                className="px-5 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium"
               >
-                Keep Current Version
+                Discard
               </button>
               <button
                 onClick={async () => {
@@ -386,9 +395,9 @@ export default function NotesPage() {
                   setAiGeneratedNotes(null)
                   setShowPreviewModal(false)
                 }}
-                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors"
+                className="px-5 py-2.5 bg-white border border-primary text-primary rounded-xl hover:bg-primary/5 transition-colors font-medium"
               >
-                Add to Current Notes
+                Append to Bottom
               </button>
               <button
                 onClick={async () => {
@@ -397,9 +406,9 @@ export default function NotesPage() {
                   setAiGeneratedNotes(null)
                   setShowPreviewModal(false)
                 }}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                className="px-5 py-2.5 bg-primary text-white rounded-xl hover:bg-opacity-90 transition-colors font-medium shadow-sm hover:shadow"
               >
-                Replace Current Notes
+                Replace All
               </button>
             </div>
           </div>

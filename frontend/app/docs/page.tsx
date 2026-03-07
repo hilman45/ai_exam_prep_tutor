@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase, authHelpers } from '../../lib/supabase'
 import FeedbackModal from '../../components/FeedbackModal'
@@ -766,10 +767,9 @@ export default function DocsPage() {
         <nav className="px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex-shrink-0">
-              <h1 className="text-2xl font-bold text-dark">
-                <span className="text-black">Prep</span>
-                <span className="text-primary">Wise</span>
-              </h1>
+              <Link href="/dashboard">
+                <img src="/logo.svg" alt="PrepWise" width={180} height={50} className="w-[180px] h-[50px] object-contain object-left" />
+              </Link>
             </div>
             <button
               onClick={() => router.push('/dashboard')}

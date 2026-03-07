@@ -1,0 +1,4 @@
+Your logo is used in: dashboard sidebar, landing header, login, signup, docs, and admin.
+
+The app expects the file to be named: logo.svg
+Place your SVG (or PNG) in this folder and name it logo.svg (or update img src in components to match your filename).

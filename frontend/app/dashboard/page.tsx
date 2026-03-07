@@ -552,119 +552,134 @@ export default function DashboardPage() {
               {isInitialLoad && folders.length === 0 ? (
                 // Skeleton loading for first-time visitors
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {[1, 2, 3].map((i) => (
+                  {[1, 2, 3, 4].map((i) => (
                     <div 
                       key={i}
-                      className="bg-white border-2 border-gray-200 rounded-lg p-6 animate-pulse"
+                      className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm animate-pulse"
                     >
                       <div className="flex items-start justify-between mb-4">
-                        <div className="w-12 h-12 bg-gray-300 rounded-lg"></div>
-                        <div className="h-4 bg-gray-300 rounded w-16"></div>
+                        <div className="w-12 h-12 bg-gray-200 rounded-xl"></div>
+                        <div className="h-8 w-8 bg-gray-200 rounded-lg"></div>
                       </div>
-                      <div className="h-5 bg-gray-300 rounded w-3/4 mb-2"></div>
-                      <div className="flex items-center space-x-4">
-                        <div className="h-3 bg-gray-300 rounded w-20"></div>
-                        <div className="h-3 bg-gray-300 rounded w-16"></div>
+                      <div className="h-5 bg-gray-200 rounded w-3/4 mb-3"></div>
+                      <div className="flex items-center space-x-2">
+                        <div className="h-3 bg-gray-200 rounded w-16"></div>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : folders.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <p>No folders found. Create your first folder!</p>
+                <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-300">
+                  <div className="w-16 h-16 bg-gray-100 text-gray-400 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-1">No folders yet</h3>
+                  <p className="text-gray-500 mb-4">Create your first folder to organize your study materials.</p>
+                  <button 
+                    className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-opacity-90 transition-colors"
+                    onClick={() => setAddFolderModalOpen(true)}
+                  >
+                    Create Folder
+                  </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                   {folders.map((folder) => (
                     <button
                       key={folder.id}
                       onClick={() => router.push(`/folders/${folder.id}?name=${encodeURIComponent(folder.name)}`)}
-                      className={`border-2 border-slate-200 rounded-lg p-6 hover:brightness-95 hover:shadow-sm transition-all text-left group relative ${
-                        folderMenuOpen === folder.id ? 'z-[9999]' : ''
+                      className={`group relative rounded-2xl p-5 transition-shadow duration-200 text-left overflow-visible w-full border-2 border-transparent hover:shadow-lg ${
+                        folderMenuOpen === folder.id ? 'z-[40]' : 'z-0'
                       }`}
                       style={{ backgroundColor: folder.color }}
                     >
-                      <div className="flex items-start justify-between mb-4">
-                        <div
-                          className="w-12 h-12 rounded-lg flex items-center justify-center text-slate-800 font-bold text-lg bg-white overflow-hidden"
-                        >
-                          {folder.picture_url ? (
-                            <img 
-                              src={folder.picture_url} 
-                              alt={folder.name}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            folder.name.charAt(0).toUpperCase()
-                          )}
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <div className="text-right">
-                            <div className="text-sm font-semibold text-slate-800 group-hover:text-primary">
-                              {folder.materials_count} items
-                            </div>
+                      <div className="relative z-10">
+                        <div className="flex justify-between items-start mb-4">
+                          {/* Icon / Image */}
+                          <div 
+                            className="w-12 h-12 rounded-xl flex items-center justify-center text-gray-800 font-bold text-lg bg-white/60 shadow-sm overflow-hidden backdrop-blur-sm"
+                          >
+                            {folder.picture_url ? (
+                              <img 
+                                src={folder.picture_url} 
+                                alt={folder.name}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              folder.name.charAt(0).toUpperCase()
+                            )}
                           </div>
-                          
+
                           {/* Kebab Menu */}
-                          <div className="relative z-40">
+                          <div className="relative" onClick={e => e.stopPropagation()}>
                             <button 
-                              className="folder-menu-button p-1 rounded hover:bg-black hover:bg-opacity-10 transition-colors"
+                              className="folder-menu-button p-1.5 rounded-lg hover:bg-black/10 text-gray-700 transition-colors"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 setFolderMenuOpen(folderMenuOpen === folder.id ? null : folder.id)
                               }}
                             >
-                              <svg className="w-4 h-4 text-slate-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
                               </svg>
                             </button>
                             
                             {/* Folder Menu Dropdown */}
                             {folderMenuOpen === folder.id && (
-                              <div className="folder-menu absolute right-0 mt-1 w-40 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-40">
+                              <div className="folder-menu absolute right-0 mt-1 w-40 bg-white rounded-xl shadow-xl border border-gray-100 py-1 z-[100] animate-in fade-in zoom-in-95 duration-100">
                                 <button 
-                                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     handleSetPicture(folder)
                                   }}
                                 >
+                                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
                                   Set Picture
                                 </button>
                                 <button 
-                                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     handleRenameFolder(folder)
                                   }}
                                 >
+                                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                  </svg>
                                   Rename
                                 </button>
+                                <div className="h-px bg-gray-100 my-1"></div>
                                 <button 
-                                  className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                                  className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     handleDeleteFolder(folder)
                                   }}
                                 >
+                                  <svg className="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
                                   Delete
                                 </button>
                               </div>
                             )}
                           </div>
                         </div>
-                      </div>
-                      <h3 className="text-lg font-semibold text-slate-800 mb-2 group-hover:text-primary transition-colors">
-                        {folder.name}
-                      </h3>
-                      <div className="flex items-center text-xs text-slate-800 space-x-4">
-                        <span>
-                          {new Date(folder.updated_at).toLocaleDateString()}
-                        </span>
-                        <span>•</span>
-                        <span>
-                          {folder.materials.files} files
-                        </span>
+
+                        <h3 className="text-lg font-bold text-gray-900 mb-1 truncate pr-2">
+                          {folder.name}
+                        </h3>
+                        
+                        <div className="flex items-center text-sm text-gray-700/80 font-medium">
+                          <span>{folder.materials_count} items</span>
+                          <span className="mx-2 opacity-50">•</span>
+                          <span className="text-xs opacity-80">{new Date(folder.updated_at).toLocaleDateString()}</span>
+                        </div>
                       </div>
                     </button>
                   ))}

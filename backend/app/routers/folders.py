@@ -260,16 +260,34 @@ async def delete_folder(
 ):
     """Delete a folder and move its materials to the default folder"""
     try:
-        # First, get the user's default folder (Untitled)
-        default_folder = await get_default_folder(current_user.id)
-        if not default_folder:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Default folder not found"
-            )
-        
-        # Move all materials from the folder to default folder
-        await move_folder_materials_to_default(folder_id, default_folder["id"])
+        # Get or create the user's default folder (Untitled)
+        default_folder = await get_or_create_default_folder(current_user.id)
+        target_folder_id = default_folder["id"]
+        # If we're deleting the default folder itself, create a new Untitled first and move materials there
+        if folder_id == target_folder_id:
+            async with httpx.AsyncClient() as client:
+                create_resp = await client.post(
+                    f"{settings.SUPABASE_URL}/rest/v1/folders",
+                    headers={
+                        "apikey": settings.SUPABASE_ANON_KEY,
+                        "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                        "Content-Type": "application/json",
+                        "Prefer": "return=representation"
+                    },
+                    json={
+                        "user_id": current_user.id,
+                        "name": "Untitled",
+                        "color": FOLDER_COLORS[0]
+                    }
+                )
+                if create_resp.status_code not in (200, 201) or not create_resp.json():
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Cannot delete default folder: could not create replacement"
+                    )
+                target_folder_id = create_resp.json()[0]["id"]
+        # Move all materials from the folder to default (or new) folder
+        await move_folder_materials_to_default(folder_id, target_folder_id)
         
         # Delete the folder
         async with httpx.AsyncClient() as client:
@@ -372,6 +390,34 @@ async def get_default_folder(user_id: str) -> Optional[dict]:
         if response.status_code == 200 and response.json():
             return response.json()[0]
         return None
+
+
+async def get_or_create_default_folder(user_id: str) -> dict:
+    """Get the default 'Untitled' folder for a user, creating it if it doesn't exist"""
+    default_folder = await get_default_folder(user_id)
+    if default_folder:
+        return default_folder
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            f"{settings.SUPABASE_URL}/rest/v1/folders",
+            headers={
+                "apikey": settings.SUPABASE_ANON_KEY,
+                "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                "Content-Type": "application/json",
+                "Prefer": "return=representation"
+            },
+            json={
+                "user_id": user_id,
+                "name": "Untitled",
+                "color": FOLDER_COLORS[0]
+            }
+        )
+        if response.status_code not in (200, 201) or not response.json():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Default folder not found and could not be created"
+            )
+        return response.json()[0]
 
 async def move_folder_materials_to_default(folder_id: str, default_folder_id: str):
     """Move all materials from a folder to the default folder"""

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase, authHelpers } from '../lib/supabase'
 
@@ -173,12 +174,11 @@ export default function AdminLayout({
         <nav className="px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             {/* Logo */}
-            <div className="flex-shrink-0">
-              <h1 className="text-2xl font-bold text-dark">
-                <span className="text-black">Prep</span>
-                <span className="text-primary">Wise</span>
-                <span className="text-sm text-gray-500 ml-2">Admin</span>
-              </h1>
+            <div className="flex-shrink-0 flex items-center gap-2">
+              <Link href="/admin" className="block">
+                <img src="/logo.svg" alt="PrepWise" width={180} height={50} className="w-[180px] h-[50px] object-contain object-left" />
+              </Link>
+              <span className="text-sm text-gray-500 font-medium">Admin</span>
             </div>
 
             {/* Profile Picture/Icon with Dropdown */}

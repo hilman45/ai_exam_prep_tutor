@@ -140,9 +140,8 @@ export default function SignUpPage() {
     <div className="min-h-screen bg-white flex flex-col items-center justify-center px-4 font-space-grotesk">
       {/* Header Logo */}
       <div className="mb-6">
-        <Link href="/" className="text-4xl font-bold font-space-grotesk">
-          <span className="text-black">Prep</span>
-          <span className="text-primary">Wise</span>
+        <Link href="/">
+          <img src="/logo.svg" alt="PrepWise" width={240} height={67} className="w-[240px] h-[67px] object-contain" />
         </Link>
       </div>
 
