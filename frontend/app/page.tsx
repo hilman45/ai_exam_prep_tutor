@@ -137,7 +137,7 @@ export default function HomePage() {
       </header>
 
       {/* Hero Section */}
-      <section id="home" className="pt-32 pb-20 lg:pt-40 lg:pb-32 px-4 overflow-hidden">
+      <section id="home" className="pt-16 pb-20 lg:pt-24 lg:pb-32 px-4 overflow-hidden">
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
             {/* Left side - Text content */}
@@ -163,17 +163,6 @@ export default function HomePage() {
                 <button onClick={() => scrollToSection('features')} className="bg-white text-gray-900 px-8 py-4 rounded-full border-2 border-gray-200 font-bold text-lg transition-all duration-300 hover:border-gray-900 hover:bg-gray-50">
                   See How It Works
                 </button>
-              </div>
-              
-              <div className="mt-10 flex items-center justify-center lg:justify-start gap-4 text-sm text-gray-500 font-medium">
-                <div className="flex -space-x-2">
-                  {[1, 2, 3, 4].map((i) => (
-                    <div key={i} className={`w-8 h-8 rounded-full border-2 border-white bg-gray-${i*100 + 100} flex items-center justify-center text-xs overflow-hidden`}>
-                      <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${i}`} alt="User" />
-                    </div>
-                  ))}
-                </div>
-                <p>Trusted by 10,000+ students</p>
               </div>
             </div>
 
@@ -238,13 +227,8 @@ export default function HomePage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
               <div className="order-2 lg:order-1">
                 <div className="bg-white rounded-3xl shadow-xl border border-gray-100 p-2 transform -rotate-1 hover:rotate-0 transition-transform duration-500">
-                  <div className="bg-purple-50 rounded-2xl h-[400px] flex items-center justify-center overflow-hidden">
-                     {/* Placeholder for feature image/animation */}
-                     <div className="text-center p-8">
-                        <div className="w-20 h-20 bg-white rounded-2xl shadow-sm flex items-center justify-center mx-auto mb-6 text-4xl">📝</div>
-                        <h4 className="text-xl font-bold text-gray-900 mb-2">Smart Summaries</h4>
-                        <p className="text-gray-500">Upload any document and get key points instantly.</p>
-                     </div>
+                  <div className="bg-purple-50 rounded-2xl h-[400px] flex items-center justify-center overflow-hidden p-2">
+                     <img src="/summaries.svg" alt="Smart Summaries" className="w-full h-full object-contain scale-105" />
                   </div>
                 </div>
               </div>
@@ -288,13 +272,8 @@ export default function HomePage() {
               </div>
               <div>
                 <div className="bg-white rounded-3xl shadow-xl border border-gray-100 p-2 transform rotate-1 hover:rotate-0 transition-transform duration-500">
-                  <div className="bg-blue-50 rounded-2xl h-[400px] flex items-center justify-center overflow-hidden">
-                     {/* Placeholder for feature image/animation */}
-                     <div className="text-center p-8">
-                        <div className="w-20 h-20 bg-white rounded-2xl shadow-sm flex items-center justify-center mx-auto mb-6 text-4xl">🎯</div>
-                        <h4 className="text-xl font-bold text-gray-900 mb-2">Quiz Mode</h4>
-                        <p className="text-gray-500">Test yourself and get instant feedback.</p>
-                     </div>
+                  <div className="bg-blue-50 rounded-2xl h-[400px] flex items-center justify-center overflow-hidden p-2">
+                     <img src="/quiz.svg" alt="Quiz Mode" className="w-full h-full object-contain scale-105" />
                   </div>
                 </div>
               </div>
@@ -304,13 +283,8 @@ export default function HomePage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
               <div className="order-2 lg:order-1">
                 <div className="bg-white rounded-3xl shadow-xl border border-gray-100 p-2 transform -rotate-1 hover:rotate-0 transition-transform duration-500">
-                  <div className="bg-yellow-50 rounded-2xl h-[400px] flex items-center justify-center overflow-hidden">
-                     {/* Placeholder for feature image/animation */}
-                     <div className="text-center p-8">
-                        <div className="w-20 h-20 bg-white rounded-2xl shadow-sm flex items-center justify-center mx-auto mb-6 text-4xl">⚡</div>
-                        <h4 className="text-xl font-bold text-gray-900 mb-2">Flashcards</h4>
-                        <p className="text-gray-500">Master terms with spaced repetition.</p>
-                     </div>
+                  <div className="bg-yellow-50 rounded-2xl h-[400px] flex items-center justify-center overflow-hidden p-2">
+                     <img src="/flashcard.svg" alt="Flashcards" className="w-full h-full object-contain scale-105" />
                   </div>
                 </div>
               </div>
