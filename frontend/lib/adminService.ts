@@ -46,6 +46,28 @@ export interface DailyActivity {
   total_actions: number
 }
 
+export interface UserGrowthPoint {
+  date: string
+  count: number
+}
+
+export interface FeatureUsage {
+  files: number
+  summaries: number
+  quizzes: number
+  flashcards: number
+  pending_feedback: number
+  new_users_this_week: number
+}
+
+export interface ContentActivityPoint {
+  date: string
+  quiz_count: number
+  flashcard_count: number
+  summary_count: number
+  total: number
+}
+
 export const adminService = {
   /**
    * Check if the current user is an admin
@@ -399,6 +421,84 @@ export const adminService = {
       return data
     } catch (error) {
       console.error('Error fetching flashcard difficulty:', error)
+      throw error
+    }
+  },
+
+  /**
+   * Get user registration growth per day (admin only)
+   */
+  async getUserGrowth(days: number = 30): Promise<UserGrowthPoint[]> {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error('No access token available')
+
+      const url = new URL(`${API_BASE_URL}/admin/analytics/user-growth`)
+      url.searchParams.append('days', days.toString())
+
+      const response = await fetch(url.toString(), {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) throw new Error(`Failed to fetch user growth: ${response.statusText}`)
+      return response.json()
+    } catch (error) {
+      console.error('Error fetching user growth:', error)
+      throw error
+    }
+  },
+
+  /**
+   * Get platform-wide feature usage counts (admin only)
+   */
+  async getFeatureUsage(): Promise<FeatureUsage> {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error('No access token available')
+
+      const response = await fetch(`${API_BASE_URL}/admin/analytics/feature-usage`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) throw new Error(`Failed to fetch feature usage: ${response.statusText}`)
+      return response.json()
+    } catch (error) {
+      console.error('Error fetching feature usage:', error)
+      throw error
+    }
+  },
+
+  /**
+   * Get daily content creation activity (admin only)
+   */
+  async getContentActivity(days: number = 30): Promise<ContentActivityPoint[]> {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error('No access token available')
+
+      const url = new URL(`${API_BASE_URL}/admin/analytics/content-activity`)
+      url.searchParams.append('days', days.toString())
+
+      const response = await fetch(url.toString(), {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) throw new Error(`Failed to fetch content activity: ${response.statusText}`)
+      return response.json()
+    } catch (error) {
+      console.error('Error fetching content activity:', error)
       throw error
     }
   },

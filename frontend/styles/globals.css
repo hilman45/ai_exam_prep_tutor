@@ -31,6 +31,15 @@
   }
 }
 
+/* Tiptap / ProseMirror editor styles */
+.ProseMirror {
+  min-height: 60vh;
+  outline: none;
+}
+.ProseMirror ul[data-type="taskList"] { list-style: none; padding: 0; }
+.ProseMirror ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 0.5rem; }
+.ProseMirror ul[data-type="taskList"] li > label { margin-top: 0.15rem; }
+
 @layer utilities {
   .perspective-1000 {
     perspective: 1000px;

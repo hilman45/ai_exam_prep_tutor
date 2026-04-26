@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel
 from typing import List, Optional
 import httpx
+import asyncio
 from datetime import datetime, timezone, timedelta
 from app.deps import get_admin_user, User
 from app.config import settings
@@ -44,6 +45,25 @@ class DailyActivity(BaseModel):
     quiz_count: int
     flashcard_count: int
     total_actions: int
+
+class UserGrowthPoint(BaseModel):
+    date: str
+    count: int
+
+class FeatureUsage(BaseModel):
+    files: int
+    summaries: int
+    quizzes: int
+    flashcards: int
+    pending_feedback: int
+    new_users_this_week: int
+
+class ContentActivityPoint(BaseModel):
+    date: str
+    quiz_count: int
+    flashcard_count: int
+    summary_count: int
+    total: int
 
 @router.get("/dashboard/stats", response_model=DashboardStats)
 async def get_dashboard_stats(
@@ -782,5 +802,233 @@ async def get_daily_study_activity(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch daily study activity: {str(e)}"
+        )
+
+@router.get("/analytics/user-growth", response_model=List[UserGrowthPoint])
+async def get_user_growth(
+    days: int = Query(30, description="Number of days to retrieve", ge=1, le=365),
+    admin_user: User = Depends(get_admin_user)
+):
+    """
+    Get user registration counts per day for the last N days.
+    Only accessible to admin users.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            headers = {
+                "apikey": settings.SUPABASE_SERVICE_KEY,
+                "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                "Content-Type": "application/json"
+            }
+
+            end_date = datetime.now(timezone.utc).date()
+            start_date = end_date - timedelta(days=days - 1)
+
+            # Fetch all user profiles and filter in Python (avoids PostgREST filter format issues)
+            url = f"{settings.SUPABASE_URL}/rest/v1/user_profiles"
+            params = {"select": "created_at"}
+
+            response = await client.get(url, headers=headers, params=params)
+
+            date_counts: dict = {}
+            current = start_date
+            while current <= end_date:
+                date_counts[current.isoformat()] = 0
+                current += timedelta(days=1)
+
+            if response.status_code == 200:
+                rows = response.json()
+                print(f"[user-growth] fetched {len(rows) if isinstance(rows, list) else '?'} user_profiles rows")
+                if isinstance(rows, list):
+                    for row in rows:
+                        raw = row.get("created_at") or ""
+                        if raw:
+                            try:
+                                dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                                d = dt.date().isoformat()
+                                if d in date_counts:
+                                    date_counts[d] += 1
+                            except Exception:
+                                pass
+                        else:
+                            # created_at is null — count as today so new signups still appear
+                            today_str = end_date.isoformat()
+                            date_counts[today_str] = date_counts.get(today_str, 0) + 1
+            else:
+                print(f"[user-growth] Supabase error {response.status_code}: {response.text[:300]}")
+
+            return [
+                UserGrowthPoint(date=d, count=date_counts[d])
+                for d in sorted(date_counts.keys())
+            ]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching user growth: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch user growth: {str(e)}"
+        )
+
+
+@router.get("/analytics/feature-usage", response_model=FeatureUsage)
+async def get_feature_usage(
+    admin_user: User = Depends(get_admin_user)
+):
+    """
+    Get platform-wide feature usage counts (files, summaries, quizzes, flashcards)
+    plus pending feedback and new users this week.
+    Only accessible to admin users.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            headers = {
+                "apikey": settings.SUPABASE_SERVICE_KEY,
+                "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                "Content-Type": "application/json"
+            }
+
+            async def count_table(table: str, extra_params: dict = None) -> int:
+                url = f"{settings.SUPABASE_URL}/rest/v1/{table}"
+                params = {"select": "id"}
+                if extra_params:
+                    params.update(extra_params)
+                resp = await client.get(url, headers=headers, params=params)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if isinstance(data, list):
+                        return len(data)
+                return 0
+
+            async def count_users_this_week() -> int:
+                week_ago_date = (datetime.now(timezone.utc) - timedelta(days=7)).date()
+                url = f"{settings.SUPABASE_URL}/rest/v1/user_profiles"
+                resp = await client.get(url, headers=headers, params={"select": "created_at"})
+                if resp.status_code != 200:
+                    return 0
+                rows = resp.json()
+                count = 0
+                if isinstance(rows, list):
+                    for row in rows:
+                        raw = row.get("created_at") or ""
+                        if raw:
+                            try:
+                                dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                                if dt.date() >= week_ago_date:
+                                    count += 1
+                            except Exception:
+                                pass
+                        else:
+                            # null created_at — assume this week
+                            count += 1
+                return count
+
+            files_count, summaries_count, quizzes_count, flashcards_count, pending_feedback, new_users = await asyncio.gather(
+                count_table("files"),
+                count_table("summaries"),
+                count_table("quizzes"),
+                count_table("flashcards"),
+                count_table("user_feedback", {"status": "eq.pending"}),
+                count_users_this_week(),
+            )
+
+            return FeatureUsage(
+                files=files_count,
+                summaries=summaries_count,
+                quizzes=quizzes_count,
+                flashcards=flashcards_count,
+                pending_feedback=pending_feedback,
+                new_users_this_week=new_users,
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching feature usage: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch feature usage: {str(e)}"
+        )
+
+
+@router.get("/analytics/content-activity", response_model=List[ContentActivityPoint])
+async def get_content_activity(
+    days: int = Query(30, description="Number of days to retrieve", ge=1, le=365),
+    admin_user: User = Depends(get_admin_user)
+):
+    """
+    Get daily content creation counts (quizzes + flashcards + summaries) for the last N days.
+    Only accessible to admin users.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            headers = {
+                "apikey": settings.SUPABASE_SERVICE_KEY,
+                "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                "Content-Type": "application/json"
+            }
+
+            end_date = datetime.now(timezone.utc).date()
+            start_date = end_date - timedelta(days=days - 1)
+
+            date_data: dict = {}
+            current = start_date
+            while current <= end_date:
+                date_data[current.isoformat()] = {"quiz_count": 0, "flashcard_count": 0, "summary_count": 0}
+                current += timedelta(days=1)
+
+            async def fetch_daily(table: str, field: str, date_col: str = "created_at") -> dict:
+                # Fetch all rows and filter by date in Python (avoids PostgREST filter format issues)
+                url = f"{settings.SUPABASE_URL}/rest/v1/{table}"
+                params = {"select": date_col}
+                resp = await client.get(url, headers=headers, params=params)
+                counts: dict = {}
+                if resp.status_code == 200:
+                    rows = resp.json()
+                    print(f"[content-activity] {table}: fetched {len(rows) if isinstance(rows, list) else '?'} rows")
+                    if isinstance(rows, list):
+                        for row in rows:
+                            raw = row.get(date_col) or ""
+                            if raw:
+                                try:
+                                    dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                                    d = dt.date().isoformat()
+                                    counts[d] = counts.get(d, 0) + 1
+                                except Exception:
+                                    pass
+                else:
+                    print(f"[content-activity] {table} error {resp.status_code}: {resp.text[:200]}")
+                return counts
+
+            quiz_counts, flashcard_counts, summary_counts = await asyncio.gather(
+                fetch_daily("quizzes", "quiz_count"),
+                fetch_daily("flashcards", "flashcard_count"),
+                fetch_daily("summaries", "summary_count"),
+            )
+
+            for d in date_data:
+                date_data[d]["quiz_count"] = quiz_counts.get(d, 0)
+                date_data[d]["flashcard_count"] = flashcard_counts.get(d, 0)
+                date_data[d]["summary_count"] = summary_counts.get(d, 0)
+
+            return [
+                ContentActivityPoint(
+                    date=d,
+                    quiz_count=date_data[d]["quiz_count"],
+                    flashcard_count=date_data[d]["flashcard_count"],
+                    summary_count=date_data[d]["summary_count"],
+                    total=date_data[d]["quiz_count"] + date_data[d]["flashcard_count"] + date_data[d]["summary_count"],
+                )
+                for d in sorted(date_data.keys())
+            ]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching content activity: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch content activity: {str(e)}"
         )
 

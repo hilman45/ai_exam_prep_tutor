@@ -2,10 +2,21 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { useEditor, EditorContent } from '@tiptap/react'
+import StarterKit from '@tiptap/starter-kit'
+import { Markdown } from 'tiptap-markdown'
+import TaskList from '@tiptap/extension-task-list'
+import TaskItem from '@tiptap/extension-task-item'
+import Link from '@tiptap/extension-link'
+import { TextStyle } from '@tiptap/extension-text-style'
+import Color from '@tiptap/extension-color'
+import FontFamily from '@tiptap/extension-font-family'
 import { notesService, Summary } from '../../lib/notesService'
+import { exportNotesAsPdf } from '../../lib/textExport'
 import { folderService, Folder } from '../../lib/folderService'
 import DashboardLayout from '../../components/DashboardLayout'
 import NotesChat from '../../components/NotesChat'
+import FormattingToolbar from '../../components/FormattingToolbar'
 
 interface GeneratedNotesData {
   fileId: string
@@ -21,7 +32,6 @@ export default function NotesPage() {
   const [notesData, setNotesData] = useState<GeneratedNotesData | null>(null)
   const [loading, setLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
-  const [editedContent, setEditedContent] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [aiGeneratedNotes, setAiGeneratedNotes] = useState<string | null>(null)
@@ -29,28 +39,47 @@ export default function NotesPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
+  const editor = useEditor({
+    extensions: [
+      Markdown,
+      StarterKit,
+      TaskList,
+      TaskItem.configure({ nested: true }),
+      Link.configure({ openOnClick: false }),
+      TextStyle,
+      Color,
+      FontFamily,
+    ],
+    content: '',
+    editable: false,
+    immediatelyRender: false,
+    editorProps: {
+      attributes: {
+        class: 'prose prose-slate max-w-none lg:prose-lg prose-headings:font-bold prose-h1:text-3xl prose-h2:text-2xl prose-p:text-gray-700 prose-a:text-primary hover:prose-a:text-primary/80',
+      },
+    },
+  })
+
   useEffect(() => {
     const loadNotesData = async () => {
       try {
         setLoading(true)
         setError(null)
 
-        // Get parameters from URL
         const summaryId = searchParams.get('summaryId')
         const folderId = searchParams.get('folderId')
         const folderName = searchParams.get('folderName')
 
         if (!summaryId) {
-          // Fallback to sessionStorage for backward compatibility
           const storedNotes = sessionStorage.getItem('generatedNotes')
           if (storedNotes) {
             try {
               const parsedNotes = JSON.parse(storedNotes)
               setNotesData(parsedNotes)
-              setEditedContent(parsedNotes.summaryText)
+              editor?.commands.setContent(parsedNotes.summaryText)
               return
-            } catch (error) {
-              console.error('Error parsing notes data:', error)
+            } catch (err) {
+              console.error('Error parsing notes data:', err)
               setError('Invalid notes data. Please generate new notes.')
               return
             }
@@ -60,39 +89,35 @@ export default function NotesPage() {
           }
         }
 
-        // Fetch summary from database
         const summary = await notesService.getSummary(summaryId)
-        console.log('Fetched summary:', summary) // Debug log
-        
-        // Get folder name if not provided
+        console.log('Fetched summary:', summary)
+
         let finalFolderName = folderName
         if (!finalFolderName && folderId) {
           try {
             const folders = await folderService.getFolders()
-            const folder = folders.find(f => f.id === folderId)
+            const folder = folders.find((f: Folder) => f.id === folderId)
             finalFolderName = folder?.name || 'Unknown Folder'
-          } catch (error) {
-            console.error('Error fetching folder:', error)
+          } catch (err) {
+            console.error('Error fetching folder:', err)
             finalFolderName = 'Unknown Folder'
           }
         }
 
-        // Create notes data object
-        const notesData: GeneratedNotesData = {
+        const data: GeneratedNotesData = {
           fileId: summary.file_id,
           summaryId: summary.id,
           notesName: summary.custom_name || summary.display_name || summary.filename || 'Generated Notes',
           folderName: finalFolderName || 'Unknown Folder',
           summaryText: summary.summary_text,
-          filename: summary.filename || 'Unknown file', // Always use original filename for Source field
-          createdAt: summary.created_at
+          filename: summary.filename || 'Unknown file',
+          createdAt: summary.created_at,
         }
 
-        setNotesData(notesData)
-        setEditedContent(summary.summary_text)
-
-      } catch (error) {
-        console.error('Error loading notes:', error)
+        setNotesData(data)
+        editor?.commands.setContent(summary.summary_text)
+      } catch (err) {
+        console.error('Error loading notes:', err)
         setError('Failed to load notes. Please try again.')
       } finally {
         setLoading(false)
@@ -100,33 +125,45 @@ export default function NotesPage() {
     }
 
     loadNotesData()
+  // editor intentionally omitted — we only want to run this on mount / searchParams change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, router])
+
+  // Hydrate editor once it becomes ready and notesData is available
+  useEffect(() => {
+    if (editor && notesData) {
+      editor.commands.setContent(notesData.summaryText)
+    }
+  }, [editor, notesData])
+
+  // Sync editable state
+  useEffect(() => {
+    if (editor) {
+      editor.setEditable(isEditing)
+    }
+  }, [editor, isEditing])
 
   const handleEdit = () => {
     setIsEditing(true)
   }
 
   const handleSave = async () => {
-    if (!notesData) return
-    
+    if (!notesData || !editor) return
+
     try {
       setIsSaving(true)
       setError(null)
-      
-      // Call the backend API to update the summary
-      const updatedSummary = await notesService.updateSummary(notesData.summaryId, editedContent)
-      
-      // Update local state with the saved content
-      setNotesData(prev => prev ? {
-        ...prev,
-        summaryText: updatedSummary.summary_text
-      } : null)
-      
+
+      const markdown = (editor.storage as unknown as { markdown: { getMarkdown: () => string } }).markdown.getMarkdown()
+      const updatedSummary = await notesService.updateSummary(notesData.summaryId, markdown)
+
+      setNotesData((prev) =>
+        prev ? { ...prev, summaryText: updatedSummary.summary_text } : null
+      )
       setIsEditing(false)
       console.log('Successfully saved edited content')
-      
-    } catch (error) {
-      console.error('Error saving notes:', error)
+    } catch (err) {
+      console.error('Error saving notes:', err)
       setError('Failed to save changes. Please try again.')
     } finally {
       setIsSaving(false)
@@ -135,14 +172,14 @@ export default function NotesPage() {
 
   const handleCancel = () => {
     setIsEditing(false)
-    setEditedContent(notesData?.summaryText || '')
+    if (notesData) {
+      editor?.commands.setContent(notesData.summaryText)
+    }
   }
 
   const handleBackToFolders = () => {
-    // Clear session storage and navigate back
     sessionStorage.removeItem('generatedNotes')
-    
-    // Navigate back to the specific folder if we have the folderId
+
     const folderId = searchParams.get('folderId')
     if (folderId) {
       const folderName = searchParams.get('folderName')
@@ -207,7 +244,7 @@ export default function NotesPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
               </button>
-              
+
               <div className="flex flex-col">
                 <div className="flex items-center gap-2 text-sm text-gray-500 mb-0.5">
                   <span>Folders</span>
@@ -221,6 +258,22 @@ export default function NotesPage() {
             </div>
 
             <div className="flex items-center gap-3">
+              <button
+                onClick={() =>
+                  exportNotesAsPdf(
+                    notesData.notesName,
+                    notesData.filename,
+                    notesData.createdAt,
+                    notesData.summaryText,
+                  )
+                }
+                className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-all shadow-sm hover:shadow flex items-center gap-2 font-medium"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Download PDF
+              </button>
               {!isEditing ? (
                 <button
                   onClick={handleEdit}
@@ -294,35 +347,21 @@ export default function NotesPage() {
               </div>
             </div>
 
+            {/* Formatting Toolbar — visible only in edit mode */}
+            {isEditing && <FormattingToolbar editor={editor} />}
+
             {/* Content Editor/Viewer */}
-            <div className="p-8 min-h-[60vh]">
-              {isEditing ? (
-                <textarea
-                  value={editedContent}
-                  onChange={(e) => setEditedContent(e.target.value)}
-                  className="w-full h-full min-h-[60vh] p-0 border-0 focus:ring-0 text-gray-800 leading-relaxed resize-none text-lg font-normal placeholder-gray-300"
-                  placeholder="Start writing your notes here..."
-                  spellCheck={false}
-                />
-              ) : (
-                <div className="prose prose-slate max-w-none lg:prose-lg prose-headings:font-bold prose-h1:text-3xl prose-h2:text-2xl prose-p:text-gray-700 prose-a:text-primary hover:prose-a:text-primary/80 prose-img:rounded-xl">
-                  <div 
-                    className="whitespace-pre-wrap"
-                    style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
-                  >
-                    {editedContent}
-                  </div>
-                </div>
-              )}
+            <div className="p-8">
+              <EditorContent editor={editor} />
             </div>
           </div>
         </div>
       </div>
-      
+
       {/* AI Chat Panel - Only visible when in edit mode */}
       {isEditing && notesData && (
-        <NotesChat 
-          notes={editedContent || notesData.summaryText}
+        <NotesChat
+          notes={(editor?.storage as { markdown?: { getMarkdown: () => string } } | undefined)?.markdown?.getMarkdown() ?? notesData.summaryText}
           notesName={notesData.notesName}
           filename={notesData.filename}
           onNotesUpdated={(updatedNotes: string) => {
@@ -334,14 +373,14 @@ export default function NotesPage() {
 
       {/* Preview Modal for AI Generated Notes */}
       {showPreviewModal && aiGeneratedNotes && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-all"
           onClick={() => {
             setAiGeneratedNotes(null)
             setShowPreviewModal(false)
           }}
         >
-          <div 
+          <div
             className="bg-white rounded-2xl p-0 max-w-4xl w-full max-h-[90vh] overflow-hidden shadow-2xl flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
@@ -366,7 +405,7 @@ export default function NotesPage() {
             <div className="flex-1 overflow-y-auto p-6 bg-gray-50/30">
               <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
                 <div className="prose max-w-none">
-                  <div 
+                  <div
                     className="whitespace-pre-wrap text-gray-800 leading-relaxed"
                     style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
                   >
@@ -387,11 +426,9 @@ export default function NotesPage() {
                 Discard
               </button>
               <button
-                onClick={async () => {
-                  // Add to current notes
-                  const currentNotes = editedContent || notesData?.summaryText || ''
-                  const combinedNotes = currentNotes + '\n\n' + aiGeneratedNotes
-                  setEditedContent(combinedNotes)
+                onClick={() => {
+                  if (!editor) return
+                  editor.commands.insertContentAt(editor.state.doc.content.size, '\n\n' + aiGeneratedNotes)
                   setAiGeneratedNotes(null)
                   setShowPreviewModal(false)
                 }}
@@ -400,9 +437,9 @@ export default function NotesPage() {
                 Append to Bottom
               </button>
               <button
-                onClick={async () => {
-                  // Replace current notes
-                  setEditedContent(aiGeneratedNotes)
+                onClick={() => {
+                  if (!editor) return
+                  editor.commands.setContent(aiGeneratedNotes)
                   setAiGeneratedNotes(null)
                   setShowPreviewModal(false)
                 }}

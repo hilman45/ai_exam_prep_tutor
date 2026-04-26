@@ -12,11 +12,24 @@
   "dependencies": {
     "@lottiefiles/dotlottie-react": "^0.17.4",
     "@supabase/supabase-js": "^2.58.0",
+    "@tiptap/extension-color": "^3.22.4",
+    "@tiptap/extension-font-family": "^3.22.4",
+    "@tiptap/extension-link": "^3.22.4",
+    "@tiptap/extension-task-item": "^3.22.4",
+    "@tiptap/extension-task-list": "^3.22.4",
+    "@tiptap/extension-text-style": "^3.22.4",
+    "@tiptap/pm": "^3.22.4",
+    "@tiptap/react": "^3.22.4",
+    "@tiptap/starter-kit": "^3.22.4",
     "chart.js": "^4.5.1",
+    "jspdf": "^4.2.1",
     "next": "14.0.0",
     "react": "^18.2.0",
     "react-chartjs-2": "^5.3.1",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "tiptap-markdown": "^0.9.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

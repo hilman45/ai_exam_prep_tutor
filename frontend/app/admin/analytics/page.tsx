@@ -5,11 +5,9 @@ import { useRouter } from 'next/navigation'
 import AdminLayout from '../../../components/AdminLayout'
 import {
   adminService,
-  TopicPerformance,
-  TopicAttempts,
-  FlashcardDifficulty,
-  DailyActivity,
-  User
+  UserGrowthPoint,
+  FeatureUsage,
+  ContentActivityPoint,
 } from '../../../lib/adminService'
 import {
   Chart as ChartJS,
@@ -21,11 +19,9 @@ import {
   Title,
   Tooltip,
   Legend,
-  ArcElement,
 } from 'chart.js'
-import { Bar, Line, Pie } from 'react-chartjs-2'
+import { Bar, Line } from 'react-chartjs-2'
 
-// Register Chart.js components
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -34,86 +30,68 @@ ChartJS.register(
   PointElement,
   Title,
   Tooltip,
-  Legend,
-  ArcElement
+  Legend
 )
 
+interface StatCard {
+  label: string
+  value: number | string
+  icon: React.ReactNode
+  accent: string
+}
+
+function StatCardComponent({ label, value, icon, accent }: StatCard) {
+  return (
+    <div className={`bg-white rounded-lg border-2 ${accent} p-5 flex items-center gap-4`}>
+      <div className={`w-12 h-12 rounded-full flex items-center justify-center ${accent.replace('border-', 'bg-').replace('-400', '-100').replace('-500', '-100')}`}>
+        {icon}
+      </div>
+      <div>
+        <p className="text-sm text-gray-500 font-medium">{label}</p>
+        <p className="text-2xl font-bold text-gray-800">{value}</p>
+      </div>
+    </div>
+  )
+}
+
+const baseChartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      position: 'top' as const,
+      labels: { font: { family: 'Space Grotesk, sans-serif' } },
+    },
+    title: { display: false },
+  },
+  scales: {
+    y: {
+      beginAtZero: true,
+      ticks: { font: { family: 'Space Grotesk, sans-serif' } },
+    },
+    x: {
+      ticks: { font: { family: 'Space Grotesk, sans-serif' } },
+    },
+  },
+}
+
+function formatDate(iso: string) {
+  const d = new Date(iso + 'T00:00:00')
+  return `${d.getMonth() + 1}/${d.getDate()}`
+}
+
 export default function AdminAnalyticsPage() {
-  const [quizPerformance, setQuizPerformance] = useState<TopicPerformance[]>([])
-  const [mostAttempted, setMostAttempted] = useState<TopicAttempts[]>([])
-  const [flashcardDifficulty, setFlashcardDifficulty] = useState<FlashcardDifficulty | null>(null)
-  const [dailyActivity, setDailyActivity] = useState<DailyActivity[]>([])
-  const [users, setUsers] = useState<User[]>([])
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [filteredUsers, setFilteredUsers] = useState<User[]>([])
+  const [userGrowth, setUserGrowth] = useState<UserGrowthPoint[]>([])
+  const [featureUsage, setFeatureUsage] = useState<FeatureUsage | null>(null)
+  const [contentActivity, setContentActivity] = useState<ContentActivityPoint[]>([])
   const [loading, setLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
 
-  // Load users list
   useEffect(() => {
-    const loadUsers = async () => {
+    const init = async () => {
       try {
-        const usersData = await adminService.getUsers()
-        setUsers(usersData)
-        setFilteredUsers(usersData)
-      } catch (err) {
-        console.error('Error loading users:', err)
-      }
-    }
-
-    if (isAdmin) {
-      loadUsers()
-    }
-  }, [isAdmin])
-
-  // Filter users based on search query
-  useEffect(() => {
-    if (searchQuery.trim() === '') {
-      setFilteredUsers(users)
-    } else {
-      const query = searchQuery.toLowerCase()
-      const filtered = users.filter(
-        (user) =>
-          user.username.toLowerCase().includes(query) ||
-          user.email.toLowerCase().includes(query) ||
-          (user.full_name && user.full_name.toLowerCase().includes(query))
-      )
-      setFilteredUsers(filtered)
-    }
-  }, [searchQuery, users])
-
-  // Load analytics data
-  const loadAnalytics = async (userId?: string) => {
-    try {
-      setLoading(true)
-      // Load all analytics data in parallel
-      const [performance, attempted, difficulty, activity] = await Promise.all([
-        adminService.getQuizPerformanceByTopic(userId || undefined).catch(() => []),
-        adminService.getMostAttemptedTopics(userId || undefined).catch(() => []),
-        adminService.getFlashcardDifficulty(userId || undefined).catch(() => ({ again_count: 0, good_count: 0, easy_count: 0 })),
-        adminService.getDailyStudyActivity(30, userId || undefined).catch(() => [])
-      ])
-
-      setQuizPerformance(performance)
-      setMostAttempted(attempted)
-      setFlashcardDifficulty(difficulty)
-      setDailyActivity(activity)
-      setError(null)
-    } catch (err: any) {
-      console.error('Error loading admin analytics:', err)
-      setError(err.message || 'Failed to load admin analytics')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    const checkAdminAndLoadAnalytics = async () => {
-      try {
-        // First check if user is admin
         const adminStatus = await adminService.checkIsAdmin()
         setIsAdmin(adminStatus)
 
@@ -123,177 +101,25 @@ export default function AdminAnalyticsPage() {
           return
         }
 
-        // Load analytics for all users (no filter) - initial load
-        // Don't reload if user is already selected (will be handled by the other useEffect)
-        if (!selectedUserId) {
-          await loadAnalytics()
-        }
+        const [growth, usage, activity] = await Promise.all([
+          adminService.getUserGrowth(30).catch(() => [] as UserGrowthPoint[]),
+          adminService.getFeatureUsage().catch(() => null),
+          adminService.getContentActivity(30).catch(() => [] as ContentActivityPoint[]),
+        ])
+
+        setUserGrowth(growth)
+        setFeatureUsage(usage)
+        setContentActivity(activity)
       } catch (err: any) {
-        console.error('Error checking admin status:', err)
+        console.error('Error loading admin analytics:', err)
         setError(err.message || 'Failed to load admin analytics')
+      } finally {
         setLoading(false)
       }
     }
 
-    checkAdminAndLoadAnalytics()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    init()
   }, [])
-
-  // Reload analytics when user selection changes
-  useEffect(() => {
-    if (isAdmin) {
-      loadAnalytics(selectedUserId || undefined)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedUserId, isAdmin])
-
-  // Chart options
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'top' as const,
-        labels: {
-          font: {
-            family: 'Space Grotesk, sans-serif',
-          },
-        },
-      },
-      title: {
-        display: false,
-      },
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        ticks: {
-          font: {
-            family: 'Space Grotesk, sans-serif',
-          },
-        },
-      },
-      x: {
-        ticks: {
-          font: {
-            family: 'Space Grotesk, sans-serif',
-          },
-        },
-      },
-    },
-  }
-
-  // Prepare Quiz Performance by Topic chart data
-  const getQuizPerformanceData = () => {
-    // Limit to top 10 topics for readability
-    const topTopics = quizPerformance.slice(0, 10)
-    
-    return {
-      labels: topTopics.map(t => t.topic_name.length > 20 ? t.topic_name.substring(0, 20) + '...' : t.topic_name),
-      datasets: [
-        {
-          label: 'Average Score (%)',
-          data: topTopics.map(t => t.average_score),
-          backgroundColor: '#892CDC',
-          borderColor: '#892CDC',
-          borderWidth: 2,
-        },
-      ],
-    }
-  }
-
-  // Prepare Most Attempted Topics chart data
-  const getMostAttemptedData = () => {
-    // Limit to top 10 topics for readability
-    const topTopics = mostAttempted.slice(0, 10)
-    
-    return {
-      labels: topTopics.map(t => t.topic_name.length > 20 ? t.topic_name.substring(0, 20) + '...' : t.topic_name),
-      datasets: [
-        {
-          label: 'Number of Attempts',
-          data: topTopics.map(t => t.attempt_count),
-          backgroundColor: '#0f5bff',
-          borderColor: '#0f5bff',
-          borderWidth: 2,
-        },
-      ],
-    }
-  }
-
-  // Prepare Flashcard Review Difficulty chart data
-  const getFlashcardDifficultyData = () => {
-    if (!flashcardDifficulty) {
-      return {
-        labels: ['Again', 'Good', 'Easy'],
-        datasets: [
-          {
-            label: 'Cards Reviewed',
-            data: [0, 0, 0],
-            backgroundColor: ['#EF4444', '#FACC15', '#22C55E'],
-            borderColor: ['#EF4444', '#FACC15', '#22C55E'],
-            borderWidth: 2,
-          },
-        ],
-      }
-    }
-
-    return {
-      labels: ['Again', 'Good', 'Easy'],
-      datasets: [
-        {
-          label: 'Cards Reviewed',
-          data: [
-            flashcardDifficulty.again_count,
-            flashcardDifficulty.good_count,
-            flashcardDifficulty.easy_count,
-          ],
-          backgroundColor: ['#EF4444', '#FACC15', '#22C55E'],
-          borderColor: ['#EF4444', '#FACC15', '#22C55E'],
-          borderWidth: 2,
-        },
-      ],
-    }
-  }
-
-  // Prepare Daily Study Activity chart data
-  const getDailyActivityData = () => {
-    // Limit to last 30 days for readability
-    const recentActivity = dailyActivity.slice(-30)
-    
-    return {
-      labels: recentActivity.map(a => {
-        const date = new Date(a.date)
-        return `${date.getMonth() + 1}/${date.getDate()}`
-      }),
-      datasets: [
-        {
-          label: 'Quiz Actions',
-          data: recentActivity.map(a => a.quiz_count),
-          borderColor: '#892CDC',
-          backgroundColor: 'rgba(137, 44, 220, 0.1)',
-          borderWidth: 2,
-          tension: 0.4,
-        },
-        {
-          label: 'Flashcard Actions',
-          data: recentActivity.map(a => a.flashcard_count),
-          borderColor: '#0f5bff',
-          backgroundColor: 'rgba(15, 91, 255, 0.1)',
-          borderWidth: 2,
-          tension: 0.4,
-        },
-        {
-          label: 'Total Actions',
-          data: recentActivity.map(a => a.total_actions),
-          borderColor: '#22C55E',
-          backgroundColor: 'rgba(34, 197, 94, 0.1)',
-          borderWidth: 2,
-          tension: 0.4,
-        },
-      ],
-    }
-  }
 
   if (loading) {
     return (
@@ -301,7 +127,7 @@ export default function AdminAnalyticsPage() {
         <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
             <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading admin analytics...</p>
+            <p className="text-gray-600">Loading analytics...</p>
           </div>
         </div>
       </AdminLayout>
@@ -319,7 +145,7 @@ export default function AdminAnalyticsPage() {
               </svg>
             </div>
             <h2 className="text-xl font-bold text-gray-800 mb-2">Access Denied</h2>
-            <p className="text-gray-600 mb-6">{error || 'Admin privileges required to access this page.'}</p>
+            <p className="text-gray-600 mb-6">{error || 'Admin privileges required.'}</p>
             <button
               onClick={() => router.push('/dashboard')}
               className="bg-primary text-white px-6 py-2 rounded-lg hover:bg-opacity-90 transition-colors"
@@ -332,170 +158,208 @@ export default function AdminAnalyticsPage() {
     )
   }
 
-  const selectedUser = selectedUserId ? users.find(u => u.user_id === selectedUserId) : null
+  // --- Stat cards ---
+  const totalContent = featureUsage
+    ? featureUsage.summaries + featureUsage.quizzes + featureUsage.flashcards
+    : 0
+
+  const statCards: StatCard[] = [
+    {
+      label: 'Total Files Uploaded',
+      value: featureUsage?.files ?? 0,
+      accent: 'border-blue-400',
+      icon: (
+        <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+        </svg>
+      ),
+    },
+    {
+      label: 'Total Content Generated',
+      value: totalContent,
+      accent: 'border-purple-400',
+      icon: (
+        <svg className="w-6 h-6 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+      ),
+    },
+    {
+      label: 'Pending Feedback',
+      value: featureUsage?.pending_feedback ?? 0,
+      accent: 'border-orange-400',
+      icon: (
+        <svg className="w-6 h-6 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+        </svg>
+      ),
+    },
+    {
+      label: 'New Users This Week',
+      value: featureUsage?.new_users_this_week ?? 0,
+      accent: 'border-green-400',
+      icon: (
+        <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+        </svg>
+      ),
+    },
+  ]
+
+  // --- Chart data ---
+  const userGrowthData = {
+    labels: userGrowth.map(p => formatDate(p.date)),
+    datasets: [
+      {
+        label: 'New Registrations',
+        data: userGrowth.map(p => p.count),
+        borderColor: '#892CDC',
+        backgroundColor: 'rgba(137, 44, 220, 0.1)',
+        borderWidth: 2,
+        tension: 0.4,
+        fill: true,
+        pointRadius: 3,
+      },
+    ],
+  }
+
+  const featureUsageData = {
+    labels: ['Files', 'Summaries', 'Quizzes', 'Flashcard Sets'],
+    datasets: [
+      {
+        label: 'Total Count',
+        data: featureUsage
+          ? [featureUsage.files, featureUsage.summaries, featureUsage.quizzes, featureUsage.flashcards]
+          : [0, 0, 0, 0],
+        backgroundColor: [
+          'rgba(15, 91, 255, 0.75)',
+          'rgba(137, 44, 220, 0.75)',
+          'rgba(34, 197, 94, 0.75)',
+          'rgba(249, 115, 22, 0.75)',
+        ],
+        borderColor: ['#0f5bff', '#892CDC', '#22C55E', '#F97316'],
+        borderWidth: 2,
+      },
+    ],
+  }
+
+  const contentActivityData = {
+    labels: contentActivity.map(p => formatDate(p.date)),
+    datasets: [
+      {
+        label: 'Quizzes',
+        data: contentActivity.map(p => p.quiz_count),
+        borderColor: '#892CDC',
+        backgroundColor: 'rgba(137, 44, 220, 0.08)',
+        borderWidth: 2,
+        tension: 0.4,
+        fill: true,
+        pointRadius: 2,
+      },
+      {
+        label: 'Flashcard Sets',
+        data: contentActivity.map(p => p.flashcard_count),
+        borderColor: '#0f5bff',
+        backgroundColor: 'rgba(15, 91, 255, 0.08)',
+        borderWidth: 2,
+        tension: 0.4,
+        fill: true,
+        pointRadius: 2,
+      },
+      {
+        label: 'Summaries',
+        data: contentActivity.map(p => p.summary_count),
+        borderColor: '#22C55E',
+        backgroundColor: 'rgba(34, 197, 94, 0.08)',
+        borderWidth: 2,
+        tension: 0.4,
+        fill: true,
+        pointRadius: 2,
+      },
+    ],
+  }
+
+  const horizontalBarOptions = {
+    ...baseChartOptions,
+    indexAxis: 'y' as const,
+    scales: {
+      x: {
+        beginAtZero: true,
+        ticks: { font: { family: 'Space Grotesk, sans-serif' } },
+      },
+      y: {
+        ticks: { font: { family: 'Space Grotesk, sans-serif' } },
+      },
+    },
+  }
+
+  const isEmptyGrowth = userGrowth.every(p => p.count === 0)
+  const isEmptyActivity = contentActivity.every(p => p.total === 0)
 
   return (
     <AdminLayout activeTab="analytics">
-      <div className="p-6">
+      <div className="p-6 space-y-6">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">Admin Analytics</h1>
-          <p className="text-gray-600">Study behavior insights and usage trends</p>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800 mb-1">Platform Analytics</h1>
+          <p className="text-gray-500 text-sm">Platform-level insights — growth, content, and feature adoption</p>
         </div>
 
-        {/* User Search and Filter */}
-        <div className="mb-6 bg-white rounded-lg border-2 border-gray-200 p-4">
-          <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
-            <div className="flex-1 w-full md:w-auto relative">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Filter by User
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search users by name, username, or email..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-primary transition-colors"
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-              {searchQuery && filteredUsers.length > 0 && (
-                <div className="absolute z-10 mt-1 w-full bg-white border-2 border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                  {filteredUsers.map((user) => (
-                    <button
-                      key={user.user_id}
-                      onClick={() => {
-                        setSelectedUserId(user.user_id)
-                        setSearchQuery('')
-                      }}
-                      className="w-full text-left px-4 py-2 hover:bg-primary hover:text-white transition-colors border-b border-gray-100 last:border-b-0"
-                    >
-                      <div className="font-medium">{user.username}</div>
-                      <div className="text-sm text-gray-600">{user.email}</div>
-                      {user.full_name && (
-                        <div className="text-xs text-gray-500">{user.full_name}</div>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {searchQuery && filteredUsers.length === 0 && (
-                <div className="absolute z-10 mt-1 w-full bg-white border-2 border-gray-200 rounded-lg shadow-lg p-4 text-center text-gray-500">
-                  No users found
-                </div>
-              )}
-            </div>
-            {selectedUser && (
-              <div className="flex items-center gap-2">
-                <div className="px-4 py-2 bg-primary bg-opacity-10 border-2 border-primary rounded-lg">
-                  <span className="text-sm font-medium text-primary">
-                    Viewing: {selectedUser.username} ({selectedUser.email})
-                  </span>
-                </div>
-                <button
-                  onClick={() => setSelectedUserId(null)}
-                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors text-sm font-medium"
-                >
-                  Clear Filter
-                </button>
-              </div>
-            )}
-            {!selectedUser && (
-              <div className="px-4 py-2 bg-gray-100 border-2 border-gray-300 rounded-lg">
-                <span className="text-sm font-medium text-gray-600">
-                  Showing: All Users
-                </span>
-              </div>
-            )}
-          </div>
+        {/* Summary Stat Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          {statCards.map(card => (
+            <StatCardComponent key={card.label} {...card} />
+          ))}
         </div>
 
-        {/* Charts Grid */}
+        {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Quiz Performance by Topic */}
-          <div className="bg-white rounded-lg border-2 border-gray-200 p-6 transition-all duration-200 hover:shadow-lg">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4">Quiz Performance by Topic</h2>
-            {quizPerformance.length === 0 ? (
-              <div className="h-64 flex items-center justify-center text-gray-500">
-                <p>No quiz performance data available</p>
+          {/* Chart 1: User Registration Growth */}
+          <div className="bg-white rounded-lg border-2 border-gray-200 p-6 hover:shadow-lg transition-shadow">
+            <h2 className="text-lg font-semibold text-gray-800 mb-1">User Registration Growth</h2>
+            <p className="text-xs text-gray-400 mb-4">New sign-ups per day — last 30 days</p>
+            {isEmptyGrowth ? (
+              <div className="h-64 flex items-center justify-center text-gray-400 text-sm">
+                No registration data yet
               </div>
             ) : (
               <div className="h-64">
-                <Bar data={getQuizPerformanceData()} options={chartOptions} />
+                <Line data={userGrowthData} options={baseChartOptions} />
               </div>
             )}
           </div>
 
-          {/* Most Attempted Quiz Topics */}
-          <div className="bg-white rounded-lg border-2 border-gray-200 p-6 transition-all duration-200 hover:shadow-lg">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4">Most Attempted Quiz Topics</h2>
-            {mostAttempted.length === 0 ? (
-              <div className="h-64 flex items-center justify-center text-gray-500">
-                <p>No quiz attempt data available</p>
+          {/* Chart 2: Feature Adoption */}
+          <div className="bg-white rounded-lg border-2 border-gray-200 p-6 hover:shadow-lg transition-shadow">
+            <h2 className="text-lg font-semibold text-gray-800 mb-1">Feature Adoption</h2>
+            <p className="text-xs text-gray-400 mb-4">Platform-wide total records per feature</p>
+            {!featureUsage ? (
+              <div className="h-64 flex items-center justify-center text-gray-400 text-sm">
+                No feature data yet
               </div>
             ) : (
               <div className="h-64">
-                <Bar data={getMostAttemptedData()} options={chartOptions} />
+                <Bar data={featureUsageData} options={horizontalBarOptions} />
               </div>
             )}
           </div>
+        </div>
 
-          {/* Flashcards Review Difficulty */}
-          <div className="bg-white rounded-lg border-2 border-gray-200 p-6 transition-all duration-200 hover:shadow-lg">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4">Flashcards Review Difficulty</h2>
-            {flashcardDifficulty && 
-             flashcardDifficulty.again_count === 0 && 
-             flashcardDifficulty.good_count === 0 && 
-             flashcardDifficulty.easy_count === 0 ? (
-              <div className="h-64 flex items-center justify-center text-gray-500">
-                <p>No flashcard review data available</p>
-              </div>
-            ) : (
-              <div className="h-64">
-                <Pie data={getFlashcardDifficultyData()} options={{
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  plugins: {
-                    legend: {
-                      position: 'top' as const,
-                      labels: {
-                        font: {
-                          family: 'Space Grotesk, sans-serif',
-                        },
-                      },
-                    },
-                  },
-                }} />
-              </div>
-            )}
-          </div>
-
-          {/* Daily Study Activity */}
-          <div className="bg-white rounded-lg border-2 border-gray-200 p-6 transition-all duration-200 hover:shadow-lg">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4">Daily Study Activity</h2>
-            {dailyActivity.length === 0 ? (
-              <div className="h-64 flex items-center justify-center text-gray-500">
-                <p>No daily activity data available</p>
-              </div>
-            ) : (
-              <div className="h-64">
-                <Line data={getDailyActivityData()} options={chartOptions} />
-              </div>
-            )}
-          </div>
+        {/* Chart 3: Daily Content Creation — full width */}
+        <div className="bg-white rounded-lg border-2 border-gray-200 p-6 hover:shadow-lg transition-shadow">
+          <h2 className="text-lg font-semibold text-gray-800 mb-1">Daily Content Creation Activity</h2>
+          <p className="text-xs text-gray-400 mb-4">Quizzes, flashcard sets, and summaries created per day — last 30 days</p>
+          {isEmptyActivity ? (
+            <div className="h-72 flex items-center justify-center text-gray-400 text-sm">
+              No content creation data yet
+            </div>
+          ) : (
+            <div className="h-72">
+              <Line data={contentActivityData} options={baseChartOptions} />
+            </div>
+          )}
         </div>
       </div>
     </AdminLayout>
   )
 }
-
