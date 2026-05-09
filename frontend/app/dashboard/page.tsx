@@ -409,13 +409,13 @@ export default function DashboardPage() {
 
   return (
     <DashboardLayout activeTab="home">
-      <div className="p-6">
+      <div className="p-4 md:p-6">
             {/* Dashboard Title with Study Streak */}
-            <div className="flex items-center justify-between mb-8">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
               <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
               
               {/* Study Streak Card - Compact */}
-              <div className="bg-gradient-to-r from-orange-50 to-yellow-50 rounded-lg border-2 border-orange-200 px-6 py-2.5 transition-all duration-200 hover:scale-[1.02] hover:shadow-md">
+              <div className="shrink-0 bg-gradient-to-r from-orange-50 to-yellow-50 rounded-lg border-2 border-orange-200 px-6 py-2.5 transition-all duration-200 hover:scale-[1.02] hover:shadow-md">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-orange-200 flex items-center justify-center flex-shrink-0">
                     <svg

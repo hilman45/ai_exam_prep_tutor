@@ -17,7 +17,7 @@ interface DashboardLayoutProps {
 export default function DashboardLayout({ 
   children, 
   activeTab = 'home',
-  sidebarBackground = 'bg-gray-50/50',
+  sidebarBackground = 'bg-gray-50',
   contentBackground = 'bg-white'
 }: DashboardLayoutProps) {
   const [user, setUser] = useState<any>(null)
@@ -31,6 +31,7 @@ export default function DashboardLayout({
   const [myFolderOpen, setMyFolderOpen] = useState(true)
   const [recentFolders, setRecentFolders] = useState<Folder[]>([])
   const [foldersLoading, setFoldersLoading] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const router = useRouter()
 
   const loadProfileData = async (userId: string) => {
@@ -194,6 +195,11 @@ export default function DashboardLayout({
     }`
   }
 
+  const handleNavigation = (path: string) => {
+    router.push(path)
+    setSidebarOpen(false)
+  }
+
   const getIconColor = (tab: string) => {
     if (activeTab === tab) return 'currentColor' // White when active
     
@@ -235,9 +241,20 @@ export default function DashboardLayout({
   return (
     <div className="min-h-screen bg-white font-space-grotesk">
       {/* Header */}
-      <header className="bg-white/80 backdrop-blur-md fixed top-0 left-64 right-0 z-20 h-16">
+      <header className="bg-white/80 backdrop-blur-md fixed top-0 left-0 lg:left-64 right-0 z-20 h-16">
         <nav className="px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-end items-center h-16 gap-3">
+          <div className="flex justify-between lg:justify-end items-center h-16 gap-3">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="lg:hidden inline-flex items-center justify-center w-10 h-10 rounded-lg border border-gray-200 text-gray-600 hover:text-primary hover:border-primary bg-white"
+              aria-label="Toggle sidebar"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+
+            <div className="flex items-center gap-3">
             {/* Feedback Button */}
             <button
               onClick={() => setFeedbackModalOpen(true)}
@@ -311,20 +328,39 @@ export default function DashboardLayout({
                 </div>
               )}
             </div>
+            </div>
           </div>
         </nav>
       </header>
 
       {/* Main Layout */}
       <div className="flex min-h-screen pt-16">
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black/40 z-30 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
         {/* Sidebar */}
-        <div className={`${sidebarBackground} border-r border-gray-200 flex flex-col w-64 fixed top-0 bottom-0 z-30 pt-2`}>
+        <div className={`${sidebarBackground} border-r border-gray-200 flex flex-col w-64 fixed left-0 top-0 bottom-0 z-40 pt-2 transform transition-transform duration-300 ease-out lg:translate-x-0 ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}>
           <div className="px-6 pb-6 flex flex-col h-full">
-            {/* Logo */}
-            <div className="mb-6 flex items-center gap-2">
-              <Link href="/dashboard" className="flex items-center gap-2">
+            {/* Logo + mobile close button */}
+            <div className="mb-6 flex items-center justify-between gap-2">
+              <Link href="/dashboard" className="flex items-center gap-2" onClick={() => setSidebarOpen(false)}>
                 <img src="/logo.svg" alt="PrepWise" width={180} height={50} className="w-[180px] h-[50px] object-contain" />
               </Link>
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="lg:hidden flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-800 hover:bg-gray-200 transition-colors"
+                aria-label="Close sidebar"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
             
             {/* Navigation */}
@@ -336,7 +372,7 @@ export default function DashboardLayout({
               {/* Home */}
               <div 
                 className={getNavItemClasses('home')}
-                onClick={() => router.push('/dashboard')}
+                onClick={() => handleNavigation('/dashboard')}
               >
                 <svg className={`w-5 h-5 transition-colors ${activeTab === 'home' ? 'text-white' : ''}`} style={{color: activeTab !== 'home' ? getIconColor('home') : undefined}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -347,7 +383,7 @@ export default function DashboardLayout({
               {/* Notes */}
               <div 
                 className={getNavItemClasses('notes')}
-                onClick={() => router.push('/notes-generator')}
+                onClick={() => handleNavigation('/notes-generator')}
               >
                 <svg className={`w-5 h-5 transition-colors ${activeTab === 'notes' ? 'text-white' : ''}`} style={{color: activeTab !== 'notes' ? getIconColor('notes') : undefined}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -358,7 +394,7 @@ export default function DashboardLayout({
               {/* Quiz */}
               <div 
                 className={getNavItemClasses('quiz')}
-                onClick={() => router.push('/quiz-generator')}
+                onClick={() => handleNavigation('/quiz-generator')}
               >
                 <svg className={`w-5 h-5 transition-colors ${activeTab === 'quiz' ? 'text-white' : ''}`} style={{color: activeTab !== 'quiz' ? getIconColor('quiz') : undefined}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
@@ -369,7 +405,7 @@ export default function DashboardLayout({
               {/* Flashcards */}
               <div 
                 className={getNavItemClasses('flashcards')}
-                onClick={() => router.push('/flashcard-generator')}
+                onClick={() => handleNavigation('/flashcard-generator')}
               >
                 <svg className={`w-5 h-5 transition-colors ${activeTab === 'flashcards' ? 'text-white' : ''}`} style={{color: activeTab !== 'flashcards' ? getIconColor('flashcards') : undefined}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
@@ -380,7 +416,7 @@ export default function DashboardLayout({
               {/* Analytics */}
               <div 
                 className={getNavItemClasses('analytics')}
-                onClick={() => router.push('/analytics')}
+                onClick={() => handleNavigation('/analytics')}
               >
                 <svg className={`w-5 h-5 transition-colors ${activeTab === 'analytics' ? 'text-white' : ''}`} style={{color: activeTab !== 'analytics' ? getIconColor('analytics') : undefined}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -392,7 +428,7 @@ export default function DashboardLayout({
               {isAdmin && (
                 <div 
                   className={getNavItemClasses('admin')}
-                  onClick={() => router.push('/admin')}
+                  onClick={() => handleNavigation('/admin')}
                 >
                   <svg className={`w-5 h-5 transition-colors ${activeTab === 'admin' ? 'text-white' : 'text-gray-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
@@ -435,7 +471,7 @@ export default function DashboardLayout({
                         <button
                           key={folder.id}
                           onClick={() => {
-                            router.push(`/folders/${folder.id}`)
+                            handleNavigation(`/folders/${folder.id}`)
                           }}
                           className="w-full text-left px-3 py-2 text-sm text-gray-600 hover:text-dark hover:bg-gray-100 rounded-md transition-colors flex items-center gap-2 truncate"
                         >
@@ -450,7 +486,7 @@ export default function DashboardLayout({
                       <div className="px-3 py-2 text-xs text-gray-400">No recent folders</div>
                     )}
                     <button
-                      onClick={() => router.push('/my-folders')}
+                      onClick={() => handleNavigation('/my-folders')}
                       className="w-full text-left px-3 py-2 text-xs text-primary hover:text-purple-700 font-medium transition-colors mt-1"
                     >
                       + View All Folders
@@ -463,7 +499,7 @@ export default function DashboardLayout({
             {/* Documentation Button at Bottom */}
             <div className="mt-auto pt-6 border-t border-gray-200">
                 <button
-                    onClick={() => router.push('/docs')}
+                    onClick={() => handleNavigation('/docs')}
                     className="w-full flex items-center space-x-3 px-3 py-2.5 text-gray-600 hover:bg-gray-100 hover:text-dark rounded-lg transition-colors"
                 >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -476,7 +512,7 @@ export default function DashboardLayout({
         </div>
 
         {/* Main Content */}
-        <div className={`flex-1 ${contentBackground} ml-64`}>
+        <div className={`flex-1 ${contentBackground} ml-0 lg:ml-64`}>
           {children}
         </div>
       </div>
