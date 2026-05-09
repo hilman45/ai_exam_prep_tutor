@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 import httpx
 from app.deps import get_current_user, User
 from app.config import settings
@@ -10,14 +10,13 @@ router = APIRouter()
 class UpdateUsernameRequest(BaseModel):
     username: str
     
-    @validator('username')
+    @field_validator('username')
+    @classmethod
     def validate_username(cls, v):
-        # Username validation
         if len(v.strip()) < 3:
             raise ValueError('Username must be at least 3 characters long')
         if len(v.strip()) > 30:
             raise ValueError('Username must be less than 30 characters')
-        # Allow alphanumeric characters, underscores, and hyphens
         if not v.replace('_', '').replace('-', '').isalnum():
             raise ValueError('Username can only contain letters, numbers, underscores, and hyphens')
         return v.strip()

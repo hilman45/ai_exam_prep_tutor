@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, EmailStr, validator
+from pydantic import BaseModel, EmailStr, field_validator
 import httpx
 from app.config import settings
 
@@ -12,36 +12,35 @@ class SignupRequest(BaseModel):
     password: str
     confirm_password: str
     
-    @validator('email')
+    @field_validator('email')
+    @classmethod
     def validate_email(cls, v):
-        # Basic email validation for development
         if '@' not in v or '.' not in v.split('@')[1]:
             raise ValueError('Invalid email format')
         return v.lower()
     
-    @validator('username')
+    @field_validator('username')
+    @classmethod
     def validate_username(cls, v):
-        # Username validation
         if len(v.strip()) < 3:
             raise ValueError('Username must be at least 3 characters long')
         if len(v.strip()) > 30:
             raise ValueError('Username must be less than 30 characters')
-        # Allow alphanumeric characters, underscores, and hyphens
         if not v.replace('_', '').replace('-', '').isalnum():
             raise ValueError('Username can only contain letters, numbers, underscores, and hyphens')
         return v.strip()
     
-    @validator('password')
+    @field_validator('password')
+    @classmethod
     def validate_password(cls, v):
-        # Password validation
         if len(v) < 6:
             raise ValueError('Password must be at least 6 characters long')
         return v
     
-    @validator('confirm_password')
-    def validate_confirm_password(cls, v, values):
-        # Confirm password validation
-        if 'password' in values and v != values['password']:
+    @field_validator('confirm_password')
+    @classmethod
+    def validate_confirm_password(cls, v, info):
+        if 'password' in info.data and v != info.data['password']:
             raise ValueError('Passwords do not match')
         return v
 
@@ -49,9 +48,9 @@ class LoginRequest(BaseModel):
     email: str
     password: str
     
-    @validator('email')
+    @field_validator('email')
+    @classmethod
     def validate_email(cls, v):
-        # Basic email validation for development
         if '@' not in v or '.' not in v.split('@')[1]:
             raise ValueError('Invalid email format')
         return v.lower()
