@@ -7,6 +7,8 @@ import GeneratorLayout from '../../components/GeneratorLayout'
 import { supabase } from '../../lib/supabase'
 import { folderService, Folder } from '../../lib/folderService'
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
 export default function FlashcardGeneratorPage() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
@@ -144,7 +146,7 @@ export default function FlashcardGeneratorPage() {
         formData.append('folder_id', folderId)
       }
       
-      const uploadResponse = await fetch('http://localhost:8000/files/upload_file', {
+      const uploadResponse = await fetch(`${API_BASE_URL}/files/upload_file`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
@@ -168,7 +170,7 @@ export default function FlashcardGeneratorPage() {
         queryParams.append('custom_name', flashcardName.trim())
       }
       
-      const flashcardResponse = await fetch(`http://localhost:8000/ai/flashcards/${fileId}?${queryParams.toString()}`, {
+      const flashcardResponse = await fetch(`${API_BASE_URL}/ai/flashcards/${fileId}?${queryParams.toString()}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,

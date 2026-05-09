@@ -7,6 +7,8 @@ import GeneratorLayout from '../../components/GeneratorLayout'
 import { supabase } from '../../lib/supabase'
 import { folderService, Folder } from '../../lib/folderService'
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
 export default function NotesGeneratorPage() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
@@ -144,7 +146,7 @@ export default function NotesGeneratorPage() {
         formData.append('folder_id', folderId)
       }
       
-      const uploadResponse = await fetch('http://localhost:8000/files/upload_file', {
+      const uploadResponse = await fetch(`${API_BASE_URL}/files/upload_file`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
@@ -162,7 +164,7 @@ export default function NotesGeneratorPage() {
 
       // Generate summary
       const formatType = notesType === 'Bullet Points' ? 'bullet_points' : 'normal'
-      const summaryResponse = await fetch(`http://localhost:8000/ai/summarize/${fileId}?format_type=${formatType}&custom_name=${encodeURIComponent(notesName.trim())}`, {
+      const summaryResponse = await fetch(`${API_BASE_URL}/ai/summarize/${fileId}?format_type=${formatType}&custom_name=${encodeURIComponent(notesName.trim())}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,

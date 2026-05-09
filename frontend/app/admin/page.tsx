@@ -6,6 +6,8 @@ import { adminService, DashboardStats } from '../../lib/adminService'
 import AdminLayout from '../../components/AdminLayout'
 import { supabase } from '../../lib/supabase'
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
 interface RecentUser {
   user_id: string
   username: string
@@ -77,7 +79,7 @@ export default function AdminDashboardPage() {
 
       // Get recent users from admin endpoint (ordered by created_at desc)
       const response = await fetch(
-        `http://localhost:8000/admin/users`,
+        `${API_BASE_URL}/admin/users`,
         {
           headers: {
             'Authorization': `Bearer ${session.access_token}`,
@@ -108,7 +110,7 @@ export default function AdminDashboardPage() {
 
       // Get recent feedback (ordered by created_at desc)
       const response = await fetch(
-        `http://localhost:8000/feedback/admin/all`,
+        `${API_BASE_URL}/feedback/admin/all`,
         {
           headers: {
             'Authorization': `Bearer ${session.access_token}`,

@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { authHelpers } from '../../lib/supabase'
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
 export default function SignUpPage() {
   const [formData, setFormData] = useState({
     username: '',
@@ -80,7 +82,7 @@ export default function SignUpPage() {
     
     try {
       // Use backend API for signup (which creates default folder)
-      const response = await fetch('http://localhost:8000/auth/signup', {
+      const response = await fetch(`${API_BASE_URL}/auth/signup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

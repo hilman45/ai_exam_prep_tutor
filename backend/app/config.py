@@ -9,8 +9,9 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: Optional[str] = "your-anon-key"
     
     # FastAPI configuration
-    FASTAPI_HOST: str = "127.0.0.1"
+    FASTAPI_HOST: str = "0.0.0.0"
     FASTAPI_PORT: int = 8000
+    CORS_ORIGINS: str = "http://localhost:3000"
     
     # Security
     SECRET_KEY: str = "your-secret-key-change-in-production"

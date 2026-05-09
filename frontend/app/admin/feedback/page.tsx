@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import AdminLayout from '../../../components/AdminLayout'
 import { supabase } from '../../../lib/supabase'
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
 interface Feedback {
   id: string
   user_id: string
@@ -65,7 +67,7 @@ export default function AdminFeedbackPage() {
       if (categoryFilter !== 'all') params.append('category_filter', categoryFilter)
 
       const response = await fetch(
-        `http://localhost:8000/feedback/admin/all?${params.toString()}`,
+        `${API_BASE_URL}/feedback/admin/all?${params.toString()}`,
         {
           headers: {
             'Authorization': `Bearer ${session.access_token}`
@@ -92,7 +94,7 @@ export default function AdminFeedbackPage() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
 
-      const response = await fetch('http://localhost:8000/feedback/admin/stats', {
+      const response = await fetch(`${API_BASE_URL}/feedback/admin/stats`, {
         headers: {
           'Authorization': `Bearer ${session.access_token}`
         }
@@ -138,7 +140,7 @@ export default function AdminFeedbackPage() {
       }
 
       const response = await fetch(
-        `http://localhost:8000/feedback/admin/${selectedFeedback.id}`,
+        `${API_BASE_URL}/feedback/admin/${selectedFeedback.id}`,
         {
           method: 'PUT',
           headers: {

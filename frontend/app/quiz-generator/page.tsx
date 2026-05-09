@@ -8,6 +8,8 @@ import { supabase } from '../../lib/supabase'
 import { folderService, Folder } from '../../lib/folderService'
 import { quizService, QuizQuestion } from '../../lib/quizService'
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
 export default function QuizGeneratorPage() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
@@ -145,7 +147,7 @@ export default function QuizGeneratorPage() {
         formData.append('folder_id', folderId)
       }
       
-      const uploadResponse = await fetch('http://localhost:8000/files/upload_file', {
+      const uploadResponse = await fetch(`${API_BASE_URL}/files/upload_file`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,

@@ -10,6 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routers import auth, protected, files, ai_processing, deletion, folders, chat, admin, feedback
 from app.config import settings
 
+allowed_origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()]
+
 app = FastAPI(
     title="AI Exam-Prep Tutor API",
     description="Backend API for AI-powered exam preparation tool",
@@ -19,7 +21,7 @@ app = FastAPI(
 # Add CORS middleware for frontend integration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -47,7 +49,7 @@ async def health_check():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
-        "main:app",
+        "app.main:app",
         host=settings.FASTAPI_HOST,
         port=settings.FASTAPI_PORT,
         reload=True
