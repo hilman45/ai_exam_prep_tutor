@@ -83,6 +83,7 @@ export default function DocsPage() {
   const [activeSubsection, setActiveSubsection] = useState<string | null>(null)
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null)
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -101,10 +102,12 @@ export default function DocsPage() {
   const handleSectionClick = (sectionId: SectionId) => {
     setActiveSection(sectionId)
     setActiveSubsection(null)
+    setSidebarOpen(false)
   }
 
   const handleSubsectionClick = (subsectionId: string) => {
     setActiveSubsection(subsectionId)
+    setSidebarOpen(false)
   }
 
   const toggleFaq = (index: number) => {
@@ -762,29 +765,59 @@ export default function DocsPage() {
       <header className="bg-white border-b-2 border-black fixed top-0 left-0 right-0 z-50">
         <nav className="px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex-shrink-0">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="lg:hidden inline-flex items-center justify-center w-10 h-10 rounded-lg border border-gray-200 text-gray-600 hover:text-primary hover:border-primary bg-white"
+                aria-label="Toggle sidebar"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
               <Link href="/dashboard">
-                <img src="/logo.svg" alt="PrepWise" width={180} height={50} className="w-[180px] h-[50px] object-contain object-left" />
+                <img src="/logo.svg" alt="PrepWise" width={180} height={50} className="w-[140px] sm:w-[180px] h-[50px] object-contain object-left" />
               </Link>
             </div>
             <button
               onClick={() => router.push('/dashboard')}
-              className="px-4 py-2 text-gray-700 hover:text-primary transition-colors flex items-center font-medium"
+              className="px-4 py-2 text-gray-700 hover:text-primary transition-colors flex items-center font-medium text-sm"
             >
-              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 mr-1 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
-              Back to Dashboard
+              <span className="hidden sm:inline">Back to Dashboard</span>
             </button>
           </div>
         </nav>
       </header>
 
       <div className="flex min-h-screen pt-16">
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black/40 z-30 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
         {/* Fixed Sidebar */}
-        <aside className="w-72 bg-gray-50/50 border-r border-gray-200 fixed left-0 top-16 bottom-0 overflow-y-auto">
+        <aside className={`w-72 bg-gray-50 border-r border-gray-200 fixed left-0 top-0 bottom-0 z-40 overflow-y-auto pt-16 transform transition-transform duration-300 ease-out lg:translate-x-0 ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}>
           <div className="p-6 flex flex-col h-full">
-            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 px-2">Documentation</h2>
+            {/* Top row: label + close button */}
+            <div className="flex items-center justify-between mb-4 px-2">
+              <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Documentation</h2>
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="lg:hidden w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-800 hover:bg-gray-200 transition-colors"
+                aria-label="Close sidebar"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
             <nav className="space-y-1 flex-1">
               {sections.map((section) => (
                 <div key={section.id} className="mb-2">
@@ -846,8 +879,8 @@ export default function DocsPage() {
         </aside>
 
         {/* Main Content Area - Centered */}
-        <main className="flex-1 ml-72">
-          <div className="max-w-4xl mx-auto px-8 py-12">
+        <main className="flex-1 ml-0 lg:ml-72">
+          <div className="max-w-4xl mx-auto px-4 sm:px-8 py-8 sm:py-12">
             {renderContent()}
           </div>
         </main>

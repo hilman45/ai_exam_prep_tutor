@@ -15,7 +15,7 @@ interface AdminLayoutProps {
 export default function AdminLayout({ 
   children, 
   activeTab = 'dashboard',
-  sidebarBackground = 'bg-gray-50/50',
+  sidebarBackground = 'bg-gray-50',
   contentBackground = 'bg-white'
 }: AdminLayoutProps) {
   const [user, setUser] = useState<any>(null)
@@ -24,6 +24,7 @@ export default function AdminLayout({
   const [fullName, setFullName] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const router = useRouter()
 
   const loadProfileData = async (userId: string) => {
@@ -119,6 +120,11 @@ export default function AdminLayout({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  const handleNavigation = (path: string) => {
+    router.push(path)
+    setSidebarOpen(false)
+  }
+
   const getNavItemClasses = (tab: string) => {
     const isActive = activeTab === tab
     return `flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all cursor-pointer group mb-1 ${
@@ -166,11 +172,20 @@ export default function AdminLayout({
   return (
     <div className="min-h-screen bg-white font-space-grotesk">
       {/* Header — mirrors DashboardLayout but with an "Admin" badge */}
-      <header className="bg-white/80 backdrop-blur-md fixed top-0 left-64 right-0 z-20 h-16 border-b border-gray-100">
+      <header className="bg-white/80 backdrop-blur-md fixed top-0 left-0 lg:left-64 right-0 z-20 h-16 border-b border-gray-100">
         <nav className="px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16 gap-3">
-            {/* Admin badge */}
+            {/* Hamburger + Admin badge */}
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="lg:hidden inline-flex items-center justify-center w-10 h-10 rounded-lg border border-gray-200 text-gray-600 hover:text-primary hover:border-primary bg-white"
+                aria-label="Toggle sidebar"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-100 text-purple-700 text-xs font-semibold">
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
@@ -249,14 +264,32 @@ export default function AdminLayout({
 
       {/* Main layout */}
       <div className="flex min-h-screen pt-16">
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black/40 z-30 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
         {/* Sidebar */}
-        <div className={`${sidebarBackground} border-r border-gray-200 flex flex-col w-64 fixed top-0 bottom-0 z-30 pt-2`}>
+        <div className={`${sidebarBackground} border-r border-gray-200 flex flex-col w-64 fixed left-0 top-0 bottom-0 z-40 pt-2 transform transition-transform duration-300 ease-out lg:translate-x-0 ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}>
           <div className="px-6 pb-6 flex flex-col h-full">
-            {/* Logo */}
-            <div className="mb-6 flex items-center gap-2">
-              <Link href="/admin" className="flex items-center gap-2">
+            {/* Logo + mobile close button */}
+            <div className="mb-6 flex items-center justify-between gap-2">
+              <Link href="/admin" className="flex items-center gap-2" onClick={() => setSidebarOpen(false)}>
                 <img src="/logo.svg" alt="PrepWise" width={180} height={50} className="w-[180px] h-[50px] object-contain" />
               </Link>
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="lg:hidden flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-800 hover:bg-gray-200 transition-colors"
+                aria-label="Close sidebar"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
 
             {/* Navigation */}
@@ -268,7 +301,7 @@ export default function AdminLayout({
               {/* Dashboard */}
               <div
                 className={getNavItemClasses('dashboard')}
-                onClick={() => router.push('/admin')}
+                onClick={() => handleNavigation('/admin')}
               >
                 <svg
                   className={`w-5 h-5 transition-colors ${activeTab === 'dashboard' ? 'text-white' : ''}`}
@@ -283,7 +316,7 @@ export default function AdminLayout({
               {/* User Management */}
               <div
                 className={getNavItemClasses('users')}
-                onClick={() => router.push('/admin/users')}
+                onClick={() => handleNavigation('/admin/users')}
               >
                 <svg
                   className={`w-5 h-5 transition-colors ${activeTab === 'users' ? 'text-white' : ''}`}
@@ -298,7 +331,7 @@ export default function AdminLayout({
               {/* Analytics */}
               <div
                 className={getNavItemClasses('analytics')}
-                onClick={() => router.push('/admin/analytics')}
+                onClick={() => handleNavigation('/admin/analytics')}
               >
                 <svg
                   className={`w-5 h-5 transition-colors ${activeTab === 'analytics' ? 'text-white' : ''}`}
@@ -313,7 +346,7 @@ export default function AdminLayout({
               {/* Feedback */}
               <div
                 className={getNavItemClasses('feedback')}
-                onClick={() => router.push('/admin/feedback')}
+                onClick={() => handleNavigation('/admin/feedback')}
               >
                 <svg
                   className={`w-5 h-5 transition-colors ${activeTab === 'feedback' ? 'text-white' : ''}`}
@@ -329,7 +362,7 @@ export default function AdminLayout({
             {/* Back to Dashboard — mirrors Documentation button in DashboardLayout */}
             <div className="mt-auto pt-6 border-t border-gray-200">
               <button
-                onClick={() => router.push('/dashboard')}
+                onClick={() => handleNavigation('/dashboard')}
                 className="w-full flex items-center space-x-3 px-3 py-2.5 text-gray-600 hover:bg-gray-100 hover:text-dark rounded-lg transition-colors"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -342,7 +375,7 @@ export default function AdminLayout({
         </div>
 
         {/* Main content */}
-        <div className={`flex-1 ${contentBackground} ml-64`}>
+        <div className={`flex-1 ${contentBackground} ml-0 lg:ml-64`}>
           {children}
         </div>
       </div>
