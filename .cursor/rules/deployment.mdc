@@ -1,0 +1,43 @@
+---
+description: Deployment setup for this project (Vercel + Render)
+alwaysApply: true
+---
+
+# Deployment Setup
+
+This project is deployed with:
+- **Frontend (Next.js 14)** → Vercel at `https://prepwise-tutor.vercel.app`
+- **Backend (FastAPI)** → Render at the Render service URL
+
+## Key facts
+
+- Frontend and backend are in the same GitHub repo: `hilman45/ai_exam_prep_tutor` (branch: `master`)
+- Both platforms auto-deploy on every `git push origin master` — no manual steps needed
+- Vercel root directory: `frontend/`
+- Render root directory: `backend/`
+
+## Environment variables
+
+**Vercel (frontend):**
+- `NEXT_PUBLIC_API_URL` → Render backend URL
+- `NEXT_PUBLIC_SUPABASE_URL` → Supabase project URL
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` → Supabase anon key
+
+**Render (backend):**
+- `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`
+- `GROQ_API_KEY`, `GROQ_MODEL`
+- `SECRET_KEY`
+- `CORS_ORIGINS` → must include the Vercel domain (e.g. `https://prepwise-tutor.vercel.app,http://localhost:3000`)
+
+## Render backend notes
+- Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- Python version pinned to 3.11.9 via `runtime.txt`
+- Free tier sleeps after 15 min inactivity — first request after sleep takes ~30–60s
+
+## Deploying changes
+```bash
+git add .
+git commit -m "description"
+git push origin master
+```
+Vercel redeploys in ~2 min, Render in ~3 min.
