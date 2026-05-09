@@ -163,11 +163,11 @@ export default function UserManagementPage() {
 
   return (
     <AdminLayout activeTab="users">
-      <div className="p-6">
+      <div className="p-3 md:p-6">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">User Management</h1>
-          <p className="text-gray-600">Manage user accounts and permissions</p>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-800 mb-1">User Management</h1>
+          <p className="text-gray-600 text-sm md:text-base">Manage user accounts and permissions</p>
         </div>
 
         {/* Search Bar */}
@@ -191,8 +191,65 @@ export default function UserManagementPage() {
           </div>
         </div>
 
-        {/* Users Table */}
-        <div className="bg-white rounded-lg border-2 border-gray-200 overflow-hidden">
+        {/* Mobile Card List (visible on small screens) */}
+        <div className="md:hidden space-y-3">
+          {filteredUsers.length === 0 ? (
+            <div className="py-8 text-center text-gray-500 bg-white rounded-lg border-2 border-gray-200">
+              {searchQuery ? 'No users found matching your search.' : 'No users found.'}
+            </div>
+          ) : (
+            filteredUsers.map((user) => (
+              <div key={user.user_id} className="bg-white rounded-xl border-2 border-gray-200 p-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-bold text-sm">
+                    {user.full_name
+                      ? user.full_name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
+                      : user.username[0].toUpperCase()}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold text-gray-900 truncate">{user.full_name || user.username}</div>
+                    <div className="text-xs text-gray-500 truncate">{user.email}</div>
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                      {user.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                    {user.is_admin && (
+                      <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">Admin</span>
+                    )}
+                  </div>
+                </div>
+                <div className="text-xs text-gray-400 mb-3">Joined {formatDate(user.created_at)}</div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleViewDetails(user)}
+                    className="flex-1 py-1.5 text-sm font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+                  >
+                    View Details
+                  </button>
+                  {user.is_active ? (
+                    <button
+                      onClick={() => handleDeactivate(user)}
+                      className="flex-1 py-1.5 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+                    >
+                      Deactivate
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleActivate(user)}
+                      className="flex-1 py-1.5 text-sm font-medium text-green-600 border border-green-200 rounded-lg hover:bg-green-50 transition-colors"
+                    >
+                      Activate
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Desktop Table (hidden on small screens) */}
+        <div className="hidden md:block bg-white rounded-lg border-2 border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50 border-b-2 border-gray-200">

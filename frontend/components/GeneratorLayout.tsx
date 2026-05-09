@@ -32,13 +32,13 @@ export default function GeneratorLayout({
   onRemoveFile
 }: GeneratorLayoutProps) {
   return (
-    <div className="p-8 max-w-5xl mx-auto">
-      <div className="flex flex-col md:flex-row gap-12">
+    <div className="p-4 md:p-8 max-w-5xl mx-auto">
+      <div className="flex flex-col md:flex-row gap-6 md:gap-12">
         {/* Left Content */}
         <div className="flex-1 space-y-6">
           <div className="space-y-3">
-            <h1 className="text-4xl font-bold text-dark tracking-tight">{title}</h1>
-            <p className="text-gray-600 text-lg leading-relaxed max-w-xl">
+            <h1 className="text-2xl md:text-4xl font-bold text-dark tracking-tight">{title}</h1>
+            <p className="text-gray-600 text-base md:text-lg leading-relaxed max-w-xl">
               {description}
             </p>
           </div>

@@ -294,46 +294,46 @@ export default function FlashcardEditPage() {
 
   return (
     <DashboardLayout activeTab="flashcards">
-      <div className="max-w-4xl mx-auto p-6">
+      <div className="max-w-4xl mx-auto p-3 md:p-6">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">{flashcardsData.flashcardName}</h1>
-            <div className="flex items-center space-x-4 text-sm text-gray-600">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
+          <div className="min-w-0">
+            <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2 truncate">{flashcardsData.flashcardName}</h1>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-600">
               <span>📁 {flashcardsData.folderName}</span>
-              <span>📄 {flashcardsData.filename}</span>
-              <span>🃏 {flashcardsData.cardCount} flashcards</span>
+              <span className="hidden sm:inline">📄 {flashcardsData.filename}</span>
+              <span>🃏 {flashcardsData.cardCount} cards</span>
               {flashcardsData.cached && <span className="text-green-600">✓ Cached</span>}
             </div>
           </div>
-          <div className="flex items-center space-x-3">
+          <div className="flex flex-wrap items-center gap-2">
             {!isEditing ? (
               <>
                 <button
                   onClick={handleEdit}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors text-sm"
                 >
-                  Edit Flashcards
+                  Edit
                 </button>
                 <button
                   onClick={handleStudyFlashcards}
-                  className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors"
+                  className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors text-sm"
                 >
-                  Study Flashcards
+                  Study
                 </button>
               </>
             ) : (
               <>
                 <button
                   onClick={handleCancel}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors text-sm"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleSave}
                   disabled={isSaving}
-                  className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                  className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
                 >
                   {isSaving && (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -367,9 +367,9 @@ export default function FlashcardEditPage() {
                     : 'border border-gray-200'
                 }`}
               >
-                <div className="flex items-start justify-between mb-4">
+                <div className="flex flex-wrap items-start justify-between gap-2 mb-4">
                   <div className="flex items-center gap-2">
-                    <h3 className={`text-lg font-semibold ${
+                    <h3 className={`text-base md:text-lg font-semibold ${
                       isSelectedForChat ? 'text-primary' : 'text-gray-900'
                     }`}>
                       Flashcard {cardIndex + 1}
@@ -379,7 +379,7 @@ export default function FlashcardEditPage() {
                     </h3>
                   </div>
                   {isEditing && (
-                    <div className="flex items-center space-x-3">
+                    <div className="flex items-center gap-2">
                       <button
                         onClick={() => {
                           if (selectedFlashcardForChat === cardIndex) {
@@ -530,7 +530,7 @@ export default function FlashcardEditPage() {
                   />
                 </div>
 
-                <div className="flex justify-end space-x-3">
+                <div className="flex flex-wrap justify-end gap-2">
                   <button
                     onClick={() => {
                       setShowAddFlashcardForm(false)
@@ -664,41 +664,41 @@ export default function FlashcardEditPage() {
                 ))}
               </div>
 
-              <div className="flex justify-end space-x-3">
+              <div className="flex flex-wrap justify-end gap-2">
                 <button
                   onClick={handleCancelPreview}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors text-sm"
                 >
-                  Keep Current Version
+                  Keep Current
                 </button>
                 {selectedFlashcardForChat !== null && selectedFlashcardForChat !== undefined ? (
                   <>
                     <button
                       onClick={() => handleApplyAIGeneratedFlashcards(false)}
-                      className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors"
+                      className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors text-sm"
                     >
-                      Add After This Flashcard
+                      Add After
                     </button>
                     <button
                       onClick={() => handleApplyAIGeneratedFlashcards(true)}
-                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
                     >
-                      Replace This Flashcard
+                      Replace
                     </button>
                   </>
                 ) : (
                   <>
                     <button
                       onClick={() => handleApplyAIGeneratedFlashcards(false)}
-                      className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors"
+                      className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors text-sm"
                     >
-                      Add to Current Flashcards
+                      Add to Set
                     </button>
                     <button
                       onClick={() => handleApplyAIGeneratedFlashcards(true)}
-                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
                     >
-                      Replace Current Flashcards
+                      Replace All
                     </button>
                   </>
                 )}

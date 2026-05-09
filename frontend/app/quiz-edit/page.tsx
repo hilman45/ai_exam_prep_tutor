@@ -289,19 +289,19 @@ export default function QuizEditPage() {
 
   return (
     <DashboardLayout activeTab="quiz">
-      <div className="max-w-4xl mx-auto p-6">
+      <div className="max-w-4xl mx-auto p-3 md:p-6">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">{quizData.quizName}</h1>
-            <div className="flex items-center space-x-4 text-sm text-gray-600">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
+          <div className="min-w-0">
+            <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2 truncate">{quizData.quizName}</h1>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-600">
               <span>📁 {quizData.folderName}</span>
-              <span>📄 {quizData.filename}</span>
+              <span className="hidden sm:inline">📄 {quizData.filename}</span>
               <span>❓ {quizData.questionCount} questions</span>
               {quizData.cached && <span className="text-green-600">✓ Cached</span>}
             </div>
           </div>
-          <div className="flex items-center space-x-3">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() =>
                 exportQuizAsPdf(quizData.quizName, quizData.filename, editedQuestions)
@@ -311,19 +311,20 @@ export default function QuizEditPage() {
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
               </svg>
-              Download PDF
+              <span className="hidden sm:inline">Download PDF</span>
+              <span className="sm:hidden">PDF</span>
             </button>
             {!isEditing ? (
               <>
                 <button
                   onClick={handleEdit}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors text-sm"
                 >
-                  Edit Questions
+                  Edit
                 </button>
                 <button
                   onClick={handleStartQuiz}
-                  className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors"
+                  className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors text-sm"
                 >
                   Start Quiz
                 </button>
@@ -332,14 +333,14 @@ export default function QuizEditPage() {
               <>
                 <button
                   onClick={handleCancel}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors text-sm"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleSave}
                   disabled={isSaving}
-                  className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                  className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
                 >
                   {isSaving && (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -373,9 +374,9 @@ export default function QuizEditPage() {
                   : 'border border-gray-200'
               }`}
             >
-              <div className="flex items-start justify-between mb-4">
+              <div className="flex flex-wrap items-start justify-between gap-2 mb-4">
                 <div className="flex items-center gap-2">
-                  <h3 className={`text-lg font-semibold ${
+                  <h3 className={`text-base md:text-lg font-semibold ${
                     isSelectedForChat ? 'text-primary' : 'text-gray-900'
                   }`}>
                     Question {questionIndex + 1}
@@ -384,9 +385,9 @@ export default function QuizEditPage() {
                     )}
                   </h3>
                 </div>
-                <div className="flex items-center space-x-3">
+                <div className="flex flex-wrap items-center gap-2">
                   <div className="text-sm text-gray-500">
-                    Correct Answer: {String.fromCharCode(65 + question.answer_index)}
+                    Correct: {String.fromCharCode(65 + question.answer_index)}
                   </div>
                   {isEditing && (
                     <>
@@ -397,7 +398,6 @@ export default function QuizEditPage() {
                           } else {
                             setSelectedQuestionForChat(questionIndex)
                             setShowAIChat(true)
-                            // Scroll to question when selected
                             setTimeout(() => {
                               const questionElement = document.getElementById(`question-${questionIndex}`)
                               if (questionElement) {
@@ -470,8 +470,8 @@ export default function QuizEditPage() {
                   Answer Options:
                 </label>
                 {question.options.map((option, optionIndex) => (
-                  <div key={optionIndex} className="flex items-center space-x-3">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                  <div key={optionIndex} className="flex items-center gap-2">
+                    <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
                       optionIndex === question.answer_index 
                         ? 'bg-green-100 text-green-800' 
                         : 'bg-gray-100 text-gray-600'
@@ -483,21 +483,21 @@ export default function QuizEditPage() {
                         type="text"
                         value={option}
                         onChange={(e) => handleOptionChange(questionIndex, optionIndex, e.target.value)}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                        className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
                       />
                     ) : (
-                      <p className="flex-1 text-gray-900">{option}</p>
+                      <p className="flex-1 text-gray-900 text-sm">{option}</p>
                     )}
                     {isEditing && (
                       <button
                         onClick={() => handleQuestionChange(questionIndex, 'answer_index', optionIndex)}
-                        className={`px-3 py-1 text-sm rounded-lg transition-colors ${
+                        className={`flex-shrink-0 px-2 py-1 text-xs rounded-lg transition-colors ${
                           optionIndex === question.answer_index
                             ? 'bg-green-100 text-green-800 border border-green-300'
                             : 'bg-gray-100 text-gray-600 border border-gray-300 hover:bg-gray-200'
                         }`}
                       >
-                        {optionIndex === question.answer_index ? 'Correct' : 'Set as Correct'}
+                        {optionIndex === question.answer_index ? '✓' : 'Set'}
                       </button>
                     )}
                   </div>
@@ -549,8 +549,8 @@ export default function QuizEditPage() {
                 </label>
                 <div className="space-y-2">
                   {newQuestion.options.map((option, optionIndex) => (
-                    <div key={optionIndex} className="flex items-center space-x-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                    <div key={optionIndex} className="flex items-center gap-2">
+                      <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
                         optionIndex === newQuestion.answer_index 
                           ? 'bg-green-100 text-green-800' 
                           : 'bg-gray-100 text-gray-600'
@@ -565,25 +565,25 @@ export default function QuizEditPage() {
                           updatedOptions[optionIndex] = e.target.value
                           setNewQuestion({ ...newQuestion, options: updatedOptions })
                         }}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                        className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
                         placeholder={`Option ${String.fromCharCode(65 + optionIndex)}`}
                       />
                       <button
                         onClick={() => setNewQuestion({ ...newQuestion, answer_index: optionIndex })}
-                        className={`px-3 py-1 text-sm rounded-lg transition-colors ${
+                        className={`flex-shrink-0 px-2 py-1 text-xs rounded-lg transition-colors ${
                           optionIndex === newQuestion.answer_index
                             ? 'bg-green-100 text-green-800 border border-green-300'
                             : 'bg-gray-100 text-gray-600 border border-gray-300 hover:bg-gray-200'
                         }`}
                       >
-                        {optionIndex === newQuestion.answer_index ? 'Correct' : 'Set as Correct'}
+                        {optionIndex === newQuestion.answer_index ? '✓' : 'Set'}
                       </button>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-3">
+              <div className="flex flex-wrap justify-end gap-2">
                 <button
                   onClick={() => {
                     setShowAddQuestionForm(false)
@@ -723,41 +723,41 @@ export default function QuizEditPage() {
                 ))}
               </div>
 
-              <div className="flex justify-end space-x-3">
+              <div className="flex flex-wrap justify-end gap-2">
                 <button
                   onClick={handleCancelPreview}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors text-sm"
                 >
-                  Keep Current Version
+                  Keep Current
                 </button>
                 {selectedQuestionForChat !== null && selectedQuestionForChat !== undefined ? (
                   <>
                     <button
                       onClick={() => handleApplyAIGeneratedQuestions(false)}
-                      className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors"
+                      className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors text-sm"
                     >
-                      Add After This Question
+                      Add After
                     </button>
                     <button
                       onClick={() => handleApplyAIGeneratedQuestions(true)}
-                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
                     >
-                      Replace This Question
+                      Replace
                     </button>
                   </>
                 ) : (
                   <>
                     <button
                       onClick={() => handleApplyAIGeneratedQuestions(false)}
-                      className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors"
+                      className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors text-sm"
                     >
-                      Add to Current Questions
+                      Add to Quiz
                     </button>
                     <button
                       onClick={() => handleApplyAIGeneratedQuestions(true)}
-                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
                     >
-                      Replace Current Questions
+                      Replace All
                     </button>
                   </>
                 )}

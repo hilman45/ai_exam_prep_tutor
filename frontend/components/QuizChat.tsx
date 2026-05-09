@@ -181,6 +181,14 @@ export default function QuizChat({
 
   return (
     <>
+      {/* Mobile backdrop */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 z-40 sm:hidden"
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+
       {/* Floating Chat Bubble */}
       {!isOpen && (
         <button
@@ -206,12 +214,17 @@ export default function QuizChat({
 
       {/* Chat Panel */}
       {isOpen && (
-        <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 w-[calc(100vw-2rem)] sm:w-96 max-w-[calc(100vw-2rem)] sm:max-w-[calc(100vw-3rem)] h-[calc(100vh-8rem)] sm:h-[600px] max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] bg-white rounded-lg shadow-2xl border border-gray-200 flex flex-col z-50 transition-all duration-200">
+        <div className="fixed bottom-0 left-0 right-0 h-[calc(100vh-4rem)] rounded-t-2xl sm:bottom-6 sm:left-auto sm:right-6 sm:w-96 sm:h-[600px] sm:max-h-[calc(100vh-3rem)] sm:rounded-lg bg-white shadow-2xl border border-gray-200 flex flex-col z-50 transition-all duration-200">
+          {/* Drag handle — mobile only */}
+          <div className="flex justify-center pt-2 pb-0.5 sm:hidden flex-shrink-0">
+            <div className="w-10 h-1 bg-gray-300 rounded-full" />
+          </div>
+
           {/* Header */}
-          <div className="bg-primary text-white p-4 rounded-t-lg flex items-center justify-between">
-            <div className="flex items-center space-x-2">
+          <div className="bg-primary text-white px-4 py-3 sm:p-4 rounded-none sm:rounded-t-lg flex items-center justify-between flex-shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
               <svg
-                className="w-5 h-5"
+                className="w-5 h-5 flex-shrink-0"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -223,10 +236,10 @@ export default function QuizChat({
                   d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
                 />
               </svg>
-              <h3 className="font-semibold">Quiz Assistant</h3>
+              <h3 className="font-semibold truncate">Quiz Assistant</h3>
               {questionIndex !== null && questionIndex !== undefined && (
-                <span className="ml-2 px-2.5 py-1 bg-white bg-opacity-20 rounded-full text-xs font-bold border border-white border-opacity-30">
-                  Question {questionIndex + 1}
+                <span className="flex-shrink-0 px-2 py-0.5 bg-white bg-opacity-20 rounded-full text-xs font-bold border border-white border-opacity-30">
+                  Q{questionIndex + 1}
                 </span>
               )}
             </div>
@@ -343,7 +356,7 @@ export default function QuizChat({
           </div>
 
           {/* Input Area */}
-          <div className="border-t border-gray-200 bg-white rounded-b-lg">
+          <div className="border-t border-gray-200 bg-white rounded-none sm:rounded-b-lg flex-shrink-0">
             {/* Prompt Suggestions - Show when no messages or when messages exist */}
             {messages.length === 0 && !isLoading && (
               <div className="p-3 border-b border-gray-200">

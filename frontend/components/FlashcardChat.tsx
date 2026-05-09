@@ -163,6 +163,14 @@ export default function FlashcardChat({
 
   return (
     <>
+      {/* Mobile backdrop */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 z-40 sm:hidden"
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+
       {/* Floating Chat Bubble */}
       {!isOpen && (
         <button
@@ -188,9 +196,14 @@ export default function FlashcardChat({
 
       {/* Chat Panel */}
       {isOpen && (
-        <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 w-[calc(100vw-2rem)] sm:w-96 max-w-[calc(100vw-2rem)] sm:max-w-[calc(100vw-3rem)] h-[calc(100vh-8rem)] sm:h-[600px] max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] bg-white rounded-lg shadow-2xl border border-gray-200 flex flex-col z-50 transition-all duration-200">
+        <div className="fixed bottom-0 left-0 right-0 h-[calc(100vh-4rem)] rounded-t-2xl sm:bottom-6 sm:left-auto sm:right-6 sm:w-96 sm:h-[600px] sm:max-h-[calc(100vh-3rem)] sm:rounded-lg bg-white shadow-2xl border border-gray-200 flex flex-col z-50 transition-all duration-200">
+          {/* Drag handle — mobile only */}
+          <div className="flex justify-center pt-2 pb-0.5 sm:hidden flex-shrink-0">
+            <div className="w-10 h-1 bg-gray-300 rounded-full" />
+          </div>
+
           {/* Header */}
-          <div className="bg-primary text-white p-4 rounded-t-lg flex items-center justify-between">
+          <div className="bg-primary text-white px-4 py-3 sm:p-4 rounded-none sm:rounded-t-lg flex items-center justify-between flex-shrink-0">
             <div className="flex items-center space-x-2">
               <svg
                 className="w-5 h-5"
@@ -320,7 +333,7 @@ export default function FlashcardChat({
           </div>
 
           {/* Input Area */}
-          <div className="border-t border-gray-200 bg-white rounded-b-lg">
+          <div className="border-t border-gray-200 bg-white rounded-none sm:rounded-b-lg flex-shrink-0">
             {/* Prompt Suggestions - Show when no messages or when messages exist */}
             {messages.length === 0 && !isLoading && (
               <div className="p-3 border-b border-gray-200">
