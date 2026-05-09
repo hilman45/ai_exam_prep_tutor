@@ -8,7 +8,11 @@ import pdfplumber
 import PyPDF2
 from docx import Document
 from PIL import Image
-import pytesseract
+try:
+    import pytesseract
+    _TESSERACT_AVAILABLE = True
+except ImportError:
+    _TESSERACT_AVAILABLE = False
 import httpx
 from app.deps import get_current_user, User
 from app.config import settings
@@ -82,6 +86,8 @@ def extract_text_from_txt(file_path: str) -> str:
 
 def extract_text_from_image(file_path: str) -> str:
     """Extract text from image using OCR (Tesseract)."""
+    if not _TESSERACT_AVAILABLE:
+        raise Exception("Image OCR is not available on this server. Please upload a PDF, DOCX, or TXT file instead.")
     try:
         # Open image with Pillow
         image = Image.open(file_path)
